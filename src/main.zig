@@ -13,9 +13,77 @@ const PROJ_WIDTH = 30;
 const PROJ_HEIGHT = 30;
 
 const Vector2D = struct {
-    proj_x: f32,
-    proj_y: f32,
+    x: f32,
+    y: f32,
 };
+
+pub fn vecMult(vec: *const Vector2D, scalar: f32) Vector2D {
+    return Vector2D{
+        .x = vec.x * scalar,
+        .y = vec.y * scalar,
+    };
+}
+
+pub fn multToVec(vec: *const Vector2D, scalar: f32) void {
+    vec.x = vec.x * scalar;
+    vec.y = vec.y * scalar;
+}
+
+pub fn addToVec(a: *Vector2D, b: *const Vector2D) void {
+    a.x += b.x;
+    a.y += b.y;
+}
+
+pub fn addVec(a: *const Vector2D, b: *const Vector2D) Vector2D {
+    return Vector2D{
+        .x = a.x + b.x,
+        .y = a.y + b.y,
+    };
+}
+
+const Projectile = struct {
+    pos: Vector2D,
+    vel: Vector2D,
+};
+
+pub fn updateProj(proj: *Projectile) void {
+    addToVec(&proj.pos, &vecMult(&proj.vel, DELTA_TIME_SEC));
+    if (proj.pos.x < 0 or proj.pos.x + PROJ_WIDTH > WINDOW_WIDTH) {
+        proj.vel.x = -proj.vel.x;
+    }
+    if (proj.pos.y < 0 or proj.pos.y + PROJ_HEIGHT > WINDOW_HEIGHT) {
+        proj.vel.y = -proj.vel.y;
+    }
+}
+
+pub fn createProj() Projectile {
+    return Projectile{
+        .pos = Vector2D{
+            .x = 0,
+            .y = 0,
+        },
+        .vel = Vector2D{
+            .x = PROJ_SPEED,
+            .y = PROJ_SPEED,
+        },
+    };
+}
+
+pub fn drawBackground(renderer: *sdl.SDL_Renderer) void {
+    _ = sdl.SDL_SetRenderDrawColor(renderer, 0x18, 0x18, 0x18, 0xFF);
+    _ = sdl.SDL_RenderClear(renderer);
+}
+
+pub fn drawProj(proj: *const Projectile, renderer: *sdl.SDL_Renderer) void {
+    const rect = sdl.SDL_Rect{
+        .x = @floatToInt(i32, proj.pos.x),
+        .y = @floatToInt(i32, proj.pos.y),
+        .w = PROJ_WIDTH,
+        .h = PROJ_HEIGHT,
+    };
+    _ = sdl.SDL_SetRenderDrawColor(renderer, 0xFF, 0x00, 0x00, 0xFF);
+    _ = sdl.SDL_RenderFillRect(renderer, &rect);
+}
 
 pub fn main() !void {
     if (sdl.SDL_Init(sdl.SDL_INIT_VIDEO) != 0) {
@@ -39,10 +107,7 @@ pub fn main() !void {
     defer sdl.SDL_DestroyRenderer(renderer);
 
     var quit = false;
-    var proj_x: f32 = 0;
-    var proj_y: f32 = 0;
-    var proj_dx: f32 = 1;
-    var proj_dy: f32 = 1;
+    var proj = createProj();
 
     while (!quit) {
         var event: sdl.SDL_Event = undefined;
@@ -58,35 +123,14 @@ pub fn main() !void {
                 else => {},
             }
         }
-        _ = sdl.SDL_SetRenderDrawColor(renderer, 0x18, 0x18, 0x18, 0xFF);
-        _ = sdl.SDL_RenderClear(renderer);
+
+        drawBackground(renderer);
+
+        drawProj(&proj, renderer);
+
+        updateProj(&proj);
+
         sdl.SDL_RenderPresent(renderer);
-
-        const proj = sdl.SDL_Rect{
-            .x = @floatToInt(i32, proj_x),
-            .y = @floatToInt(i32, proj_y),
-            .w = PROJ_WIDTH,
-            .h = PROJ_HEIGHT,
-        };
-
-        _ = sdl.SDL_SetRenderDrawColor(renderer, 0xFF, 0x00, 0x00, 0xFF);
-        _ = sdl.SDL_RenderFillRect(renderer, &proj);
-        sdl.SDL_RenderPresent(renderer);
-
-        var proj_nx = proj_x + proj_dx * PROJ_SPEED * DELTA_TIME_SEC;
-        if (proj_nx < 0 or proj_nx + PROJ_WIDTH > WINDOW_WIDTH) {
-            proj_dx *= -1;
-            proj_nx = proj_x + proj_dx * PROJ_SPEED * DELTA_TIME_SEC;
-        }
-        var proj_ny = proj_y + proj_dy * PROJ_SPEED * DELTA_TIME_SEC;
-        if (proj_ny < 0 or proj_ny + PROJ_HEIGHT > WINDOW_HEIGHT) {
-            proj_dy *= -1;
-            proj_ny = proj_y + proj_dy * PROJ_SPEED * DELTA_TIME_SEC;
-        }
-
-        proj_x = proj_nx;
-        proj_y = proj_ny;
-
         sdl.SDL_Delay(FRAME_TARGET_TIME_MS);
     }
 }
