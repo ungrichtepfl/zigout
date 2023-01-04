@@ -2,6 +2,7 @@ const std = @import("std");
 const sdl = @cImport({
     @cInclude("SDL2/SDL.h");
 });
+const math = std.math;
 
 const WINDOW_WIDTH = 800;
 const WINDOW_HEIGHT = 600;
@@ -16,7 +17,7 @@ const BAR_WIDTH = 80;
 const BAR_START_X = 400;
 const BAR_START_Y = 500;
 const BAR_ACC_CHANGE: i32 = 1000;
-const BAR_SPEED: i32 = PROJ_SPEED;
+const BAR_SPEED: i32 = PROJ_SPEED + 1; // bigger than PROJ_SPEED to prevent Proj sticking to Bar
 const BAR_DRAG: f32 = 0.01;
 const BAR_MAX_SPEED: i32 = 700;
 const BAR_MAX_ACC: i32 = BAR_ACC_CHANGE * FPS;
@@ -25,6 +26,15 @@ pub const Vector2D = struct {
     x: i32,
     y: i32,
 };
+
+pub fn createRect(x: i32, y: i32, w: i32, h: i32) sdl.SDL_Rect {
+    return sdl.SDL_Rect{
+        .x = x,
+        .y = y,
+        .w = w,
+        .h = h,
+    };
+}
 
 pub fn vecMult(vec: *const Vector2D, scalar: f32) Vector2D {
     return Vector2D{
@@ -55,14 +65,21 @@ pub const Projectile = struct {
     vel: Vector2D,
 };
 
-pub fn updateProj(proj: *Projectile) void {
-    addToVec(&proj.pos, &vecMult(&proj.vel, DELTA_TIME_SEC));
-    if (proj.pos.x < 0 or proj.pos.x + PROJ_WIDTH > WINDOW_WIDTH) {
+pub fn updateProj(proj: *Projectile, bar: *const Bar) void {
+    const n_pos = addVec(&proj.pos, &vecMult(&proj.vel, DELTA_TIME_SEC));
+    const barRect = createBarRect(bar);
+    const projRect_x = createRect(n_pos.x, proj.pos.y, PROJ_WIDTH, PROJ_HEIGHT);
+    const intersects_bar_x = sdl.SDL_HasIntersection(&barRect, &projRect_x) != 0;
+
+    if (n_pos.x < 0 or n_pos.x + PROJ_WIDTH > WINDOW_WIDTH or intersects_bar_x) {
         proj.vel.x = -proj.vel.x;
     }
-    if (proj.pos.y < 0 or proj.pos.y + PROJ_HEIGHT > WINDOW_HEIGHT) {
+    const projRect_y = createRect(proj.pos.x, n_pos.y, PROJ_WIDTH, PROJ_HEIGHT);
+    const intersects_bar_y = sdl.SDL_HasIntersection(&barRect, &projRect_y) != 0;
+    if (proj.pos.y < 0 or proj.pos.y + PROJ_HEIGHT > WINDOW_HEIGHT or intersects_bar_y) {
         proj.vel.y = -proj.vel.y;
     }
+    addToVec(&proj.pos, &vecMult(&proj.vel, DELTA_TIME_SEC));
 }
 
 pub fn createProj() Projectile {
@@ -78,13 +95,12 @@ pub fn createProj() Projectile {
     };
 }
 
+pub fn createProjRect(proj: *const Projectile) sdl.SDL_Rect {
+    return createRect(proj.pos.x, proj.pos.y, PROJ_WIDTH, PROJ_HEIGHT);
+}
+
 pub fn drawProj(proj: *const Projectile, renderer: *sdl.SDL_Renderer) void {
-    const rect = sdl.SDL_Rect{
-        .x = proj.pos.x,
-        .y = proj.pos.y,
-        .w = PROJ_WIDTH,
-        .h = PROJ_HEIGHT,
-    };
+    const rect = createProjRect(proj);
     _ = sdl.SDL_SetRenderDrawColor(renderer, 0xFF, 0x00, 0x00, 0xFF);
     _ = sdl.SDL_RenderFillRect(renderer, &rect);
 }
@@ -104,9 +120,14 @@ pub fn createBar() Bar {
     };
 }
 
+pub fn createBarRect(bar: *const Bar) sdl.SDL_Rect {
+    return createRect(bar.pos.x, bar.pos.y, BAR_WIDTH, BAR_HEIGHT);
+}
+
 pub fn moveBarLeft(bar: *Bar) void {
     moveBar(bar, -1);
 }
+
 pub fn moveBarRight(bar: *Bar) void {
     moveBar(bar, 1);
 }
@@ -117,19 +138,12 @@ fn moveBar(bar: *Bar, direction: i32) void {
 
 pub fn updateBar(bar: *Bar) void {
     var nx = bar.pos.x + @floatToInt(i32, @intToFloat(f32, bar.vel) * DELTA_TIME_SEC);
-    if (nx < 0 or nx + BAR_WIDTH > WINDOW_WIDTH) {
-        nx = if (nx < 0) 0 else WINDOW_WIDTH - BAR_WIDTH;
-    }
+    nx = math.clamp(nx, 0, WINDOW_WIDTH - BAR_WIDTH);
     bar.pos.x = nx;
 }
 
 pub fn drawBar(proj: *const Bar, renderer: *sdl.SDL_Renderer) void {
-    const rect = sdl.SDL_Rect{
-        .x = proj.pos.x,
-        .y = proj.pos.y,
-        .w = BAR_WIDTH,
-        .h = BAR_HEIGHT,
-    };
+    const rect = createBarRect(proj);
     _ = sdl.SDL_SetRenderDrawColor(renderer, 0xFF, 0xFF, 0x00, 0xFF);
     _ = sdl.SDL_RenderFillRect(renderer, &rect);
 }
@@ -198,7 +212,7 @@ pub fn main() !void {
         }
 
         if (!pause) {
-            updateProj(&proj);
+            updateProj(&proj, &bar);
             updateBar(&bar);
         }
         drawBackground(renderer);
