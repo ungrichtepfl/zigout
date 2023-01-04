@@ -7,26 +7,35 @@ const WINDOW_WIDTH = 800;
 const WINDOW_HEIGHT = 600;
 const FPS = 60;
 const FRAME_TARGET_TIME_MS = 1000 / FPS;
-const PROJ_SPEED: f32 = 300;
+const PROJ_SPEED: i32 = 300;
 const DELTA_TIME_SEC: f32 = 1.0 / @intToFloat(f32, FPS);
 const PROJ_WIDTH = 30;
 const PROJ_HEIGHT = 30;
+const BAR_HEIGHT = 20;
+const BAR_WIDTH = 80;
+const BAR_START_X = 400;
+const BAR_START_Y = 500;
+const BAR_ACC_CHANGE: i32 = 1000;
+const BAR_SPEED: i32 = PROJ_SPEED;
+const BAR_DRAG: f32 = 0.01;
+const BAR_MAX_SPEED: i32 = 700;
+const BAR_MAX_ACC: i32 = BAR_ACC_CHANGE * FPS;
 
-const Vector2D = struct {
-    x: f32,
-    y: f32,
+pub const Vector2D = struct {
+    x: i32,
+    y: i32,
 };
 
 pub fn vecMult(vec: *const Vector2D, scalar: f32) Vector2D {
     return Vector2D{
-        .x = vec.x * scalar,
-        .y = vec.y * scalar,
+        .x = @floatToInt(i32, @intToFloat(f32, vec.x) * scalar),
+        .y = @floatToInt(i32, @intToFloat(f32, vec.y) * scalar),
     };
 }
 
 pub fn multToVec(vec: *const Vector2D, scalar: f32) void {
-    vec.x = vec.x * scalar;
-    vec.y = vec.y * scalar;
+    vec.x = @floatToInt(i32, @intToFloat(f32, vec.x) * scalar);
+    vec.y = @floatToInt(i32, @intToFloat(f32, vec.y) * scalar);
 }
 
 pub fn addToVec(a: *Vector2D, b: *const Vector2D) void {
@@ -41,7 +50,7 @@ pub fn addVec(a: *const Vector2D, b: *const Vector2D) Vector2D {
     };
 }
 
-const Projectile = struct {
+pub const Projectile = struct {
     pos: Vector2D,
     vel: Vector2D,
 };
@@ -69,20 +78,65 @@ pub fn createProj() Projectile {
     };
 }
 
-pub fn drawBackground(renderer: *sdl.SDL_Renderer) void {
-    _ = sdl.SDL_SetRenderDrawColor(renderer, 0x18, 0x18, 0x18, 0xFF);
-    _ = sdl.SDL_RenderClear(renderer);
-}
-
 pub fn drawProj(proj: *const Projectile, renderer: *sdl.SDL_Renderer) void {
     const rect = sdl.SDL_Rect{
-        .x = @floatToInt(i32, proj.pos.x),
-        .y = @floatToInt(i32, proj.pos.y),
+        .x = proj.pos.x,
+        .y = proj.pos.y,
         .w = PROJ_WIDTH,
         .h = PROJ_HEIGHT,
     };
     _ = sdl.SDL_SetRenderDrawColor(renderer, 0xFF, 0x00, 0x00, 0xFF);
     _ = sdl.SDL_RenderFillRect(renderer, &rect);
+}
+
+pub const Bar = struct {
+    pos: Vector2D,
+    vel: i32,
+};
+
+pub fn createBar() Bar {
+    return Bar{
+        .pos = Vector2D{
+            .x = BAR_START_X,
+            .y = BAR_START_Y,
+        },
+        .vel = 0,
+    };
+}
+
+pub fn moveBarLeft(bar: *Bar) void {
+    moveBar(bar, -1);
+}
+pub fn moveBarRight(bar: *Bar) void {
+    moveBar(bar, 1);
+}
+
+fn moveBar(bar: *Bar, direction: i32) void {
+    bar.vel = direction * BAR_SPEED;
+}
+
+pub fn updateBar(bar: *Bar) void {
+    var nx = bar.pos.x + @floatToInt(i32, @intToFloat(f32, bar.vel) * DELTA_TIME_SEC);
+    if (nx < 0 or nx + BAR_WIDTH > WINDOW_WIDTH) {
+        nx = if (nx < 0) 0 else WINDOW_WIDTH - BAR_WIDTH;
+    }
+    bar.pos.x = nx;
+}
+
+pub fn drawBar(proj: *const Bar, renderer: *sdl.SDL_Renderer) void {
+    const rect = sdl.SDL_Rect{
+        .x = proj.pos.x,
+        .y = proj.pos.y,
+        .w = BAR_WIDTH,
+        .h = BAR_HEIGHT,
+    };
+    _ = sdl.SDL_SetRenderDrawColor(renderer, 0xFF, 0xFF, 0x00, 0xFF);
+    _ = sdl.SDL_RenderFillRect(renderer, &rect);
+}
+
+pub fn drawBackground(renderer: *sdl.SDL_Renderer) void {
+    _ = sdl.SDL_SetRenderDrawColor(renderer, 0x18, 0x18, 0x18, 0xFF);
+    _ = sdl.SDL_RenderClear(renderer);
 }
 
 pub fn main() !void {
@@ -106,8 +160,16 @@ pub fn main() !void {
 
     defer sdl.SDL_DestroyRenderer(renderer);
 
+    const keyboard_state = sdl.SDL_GetKeyboardState(null);
+
     var quit = false;
+    var pause = false;
     var proj = createProj();
+    var bar = createBar();
+
+    drawBackground(renderer);
+    drawProj(&proj, renderer);
+    drawBar(&bar, renderer);
 
     while (!quit) {
         var event: sdl.SDL_Event = undefined;
@@ -117,6 +179,7 @@ pub fn main() !void {
                 sdl.SDL_KEYDOWN => {
                     switch (event.key.keysym.sym) {
                         'q' => quit = true,
+                        'p' => pause = !pause,
                         else => {},
                     }
                 },
@@ -124,11 +187,23 @@ pub fn main() !void {
             }
         }
 
+        const a_pressed = keyboard_state[sdl.SDL_SCANCODE_A] != 0;
+        const d_pressed = keyboard_state[sdl.SDL_SCANCODE_D] != 0;
+        if (a_pressed and !d_pressed) {
+            moveBarLeft(&bar);
+        } else if (d_pressed and !a_pressed) {
+            moveBarRight(&bar);
+        } else {
+            bar.vel = 0;
+        }
+
+        if (!pause) {
+            updateProj(&proj);
+            updateBar(&bar);
+        }
         drawBackground(renderer);
-
         drawProj(&proj, renderer);
-
-        updateProj(&proj);
+        drawBar(&bar, renderer);
 
         sdl.SDL_RenderPresent(renderer);
         sdl.SDL_Delay(FRAME_TARGET_TIME_MS);
