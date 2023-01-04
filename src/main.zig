@@ -6,21 +6,35 @@ const math = std.math;
 
 const WINDOW_WIDTH = 800;
 const WINDOW_HEIGHT = 600;
+
 const FPS = 60;
 const FRAME_TARGET_TIME_MS = 1000 / FPS;
-const PROJ_SPEED: i32 = 300;
 const DELTA_TIME_SEC: f32 = 1.0 / @intToFloat(f32, FPS);
+
+const PROJ_SPEED: i32 = 300;
 const PROJ_WIDTH = 30;
 const PROJ_HEIGHT = 30;
+
 const BAR_HEIGHT = 20;
 const BAR_WIDTH = 80;
 const BAR_START_X = 400;
 const BAR_START_Y = 500;
 const BAR_ACC_CHANGE: i32 = 1000;
 const BAR_SPEED: i32 = PROJ_SPEED + 1; // bigger than PROJ_SPEED to prevent Proj sticking to Bar
+
 const BAR_DRAG: f32 = 0.01;
 const BAR_MAX_SPEED: i32 = 700;
 const BAR_MAX_ACC: i32 = BAR_ACC_CHANGE * FPS;
+
+const TARGET_SPACE_HEIGHT = @divTrunc(WINDOW_HEIGHT, 3);
+const TARGET_SPACE_WIDTH = @divTrunc(WINDOW_WIDTH, 4) * 3;
+const TARGET_NUMBER_HEIGHT = 4;
+const TARGET_NUMBER_WIDTH = 6;
+const TARGET_NUMBER = TARGET_NUMBER_HEIGHT * TARGET_NUMBER_WIDTH;
+const TARGET_WIDTH = BAR_WIDTH;
+const TARGET_HEIGHT = BAR_HEIGHT;
+const TARGET_Y_PADDING = @divTrunc(WINDOW_HEIGHT, 8);
+const TARGET_X_PADDING = @divTrunc(WINDOW_WIDTH - TARGET_SPACE_WIDTH, 2);
 
 pub const Vector2D = struct {
     x: i32,
@@ -65,20 +79,35 @@ pub const Projectile = struct {
     vel: Vector2D,
 };
 
-pub fn updateProj(proj: *Projectile, bar: *const Bar) void {
+pub fn updateProj(proj: *Projectile, targets: *[TARGET_NUMBER]Target, bar: *const Bar) void {
     const n_pos = addVec(&proj.pos, &vecMult(&proj.vel, DELTA_TIME_SEC));
     const barRect = createBarRect(bar);
     const projRect_x = createRect(n_pos.x, proj.pos.y, PROJ_WIDTH, PROJ_HEIGHT);
-    const intersects_bar_x = sdl.SDL_HasIntersection(&barRect, &projRect_x) != 0;
+    const projRect_y = createRect(proj.pos.x, n_pos.y, PROJ_WIDTH, PROJ_HEIGHT);
 
-    if (n_pos.x < 0 or n_pos.x + PROJ_WIDTH > WINDOW_WIDTH or intersects_bar_x) {
+    var intersects_target_x = false;
+    var intersects_target_y = false;
+    for (targets) |*target| {
+        if (target.is_alive) {
+            const targetRect = createTargetRect(target);
+            intersects_target_x = sdl.SDL_HasIntersection(&targetRect, &projRect_x) != 0;
+            intersects_target_y = sdl.SDL_HasIntersection(&targetRect, &projRect_y) != 0;
+            if (intersects_target_x or intersects_target_y) {
+                target.is_alive = false;
+                break;
+            }
+        }
+    }
+
+    const intersects_bar_x = sdl.SDL_HasIntersection(&barRect, &projRect_x) != 0;
+    if (n_pos.x < 0 or n_pos.x + PROJ_WIDTH > WINDOW_WIDTH or intersects_bar_x or intersects_target_x) {
         proj.vel.x = -proj.vel.x;
     }
-    const projRect_y = createRect(proj.pos.x, n_pos.y, PROJ_WIDTH, PROJ_HEIGHT);
     const intersects_bar_y = sdl.SDL_HasIntersection(&barRect, &projRect_y) != 0;
-    if (proj.pos.y < 0 or proj.pos.y + PROJ_HEIGHT > WINDOW_HEIGHT or intersects_bar_y) {
+    if (proj.pos.y < 0 or proj.pos.y + PROJ_HEIGHT > WINDOW_HEIGHT or intersects_bar_y or intersects_target_y) {
         proj.vel.y = -proj.vel.y;
     }
+
     addToVec(&proj.pos, &vecMult(&proj.vel, DELTA_TIME_SEC));
 }
 
@@ -148,6 +177,57 @@ pub fn drawBar(proj: *const Bar, renderer: *sdl.SDL_Renderer) void {
     _ = sdl.SDL_RenderFillRect(renderer, &rect);
 }
 
+pub const Target = struct {
+    pos: Vector2D,
+    is_alive: bool = true,
+};
+
+pub fn createTargets() [TARGET_NUMBER]Target {
+    const dx = @divTrunc(TARGET_SPACE_WIDTH, TARGET_NUMBER_WIDTH);
+    const dy = @divTrunc(TARGET_SPACE_HEIGHT, TARGET_NUMBER_HEIGHT);
+    // FIXME: Fix alignemnet.
+    // const align_x = dx - TARGET_WIDTH;
+    // const align_y = dy - TARGET_HEIGHT;
+
+    var targets: [TARGET_NUMBER]Target = undefined;
+    var idx: i32 = 0;
+    for (targets) |*target| {
+        const idx_x = @mod(idx, TARGET_NUMBER_WIDTH);
+        const idx_y = @divTrunc(idx, TARGET_NUMBER_WIDTH);
+        var pos_x = TARGET_X_PADDING + dx * idx_x;
+        var pos_y = TARGET_Y_PADDING + dy * idx_y;
+        // if (idx_x > 0) {
+        //     pos_y += align_y;
+        // }
+        // if (idx_y > 0) {
+        //     pos_x += align_x;
+        // // }
+        // std.debug.print("({}, {})\tx: {}\t y: {}\n", .{ idx_x, idx_y, pos_x, pos_y });
+        target.* = Target{
+            .pos = Vector2D{
+                .x = pos_x,
+                .y = pos_y,
+            },
+        };
+        idx += 1;
+    }
+    return targets;
+}
+
+pub fn createTargetRect(target: *const Target) sdl.SDL_Rect {
+    return createRect(target.pos.x, target.pos.y, TARGET_WIDTH, TARGET_HEIGHT);
+}
+
+pub fn drawTargets(targets: *const [TARGET_NUMBER]Target, renderer: *sdl.SDL_Renderer) void {
+    for (targets) |*target| {
+        if (target.is_alive) {
+            const rect = createTargetRect(target);
+            _ = sdl.SDL_SetRenderDrawColor(renderer, 0x00, 0xFF, 0xFF, 0xFF);
+            _ = sdl.SDL_RenderFillRect(renderer, &rect);
+        }
+    }
+}
+
 pub fn drawBackground(renderer: *sdl.SDL_Renderer) void {
     _ = sdl.SDL_SetRenderDrawColor(renderer, 0x18, 0x18, 0x18, 0xFF);
     _ = sdl.SDL_RenderClear(renderer);
@@ -180,10 +260,12 @@ pub fn main() !void {
     var pause = false;
     var proj = createProj();
     var bar = createBar();
+    var targets = createTargets();
 
     drawBackground(renderer);
     drawProj(&proj, renderer);
     drawBar(&bar, renderer);
+    drawTargets(&targets, renderer);
 
     while (!quit) {
         var event: sdl.SDL_Event = undefined;
@@ -212,12 +294,13 @@ pub fn main() !void {
         }
 
         if (!pause) {
-            updateProj(&proj, &bar);
+            updateProj(&proj, &targets, &bar);
             updateBar(&bar);
         }
         drawBackground(renderer);
         drawProj(&proj, renderer);
         drawBar(&bar, renderer);
+        drawTargets(&targets, renderer);
 
         sdl.SDL_RenderPresent(renderer);
         sdl.SDL_Delay(FRAME_TARGET_TIME_MS);
