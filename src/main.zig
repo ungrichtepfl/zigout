@@ -4,36 +4,46 @@ const sdl = @cImport({
 });
 const math = std.math;
 
-const WINDOW_WIDTH = 800;
-const WINDOW_HEIGHT = 600;
+pub const Color = struct {
+    r: u8,
+    g: u8,
+    b: u8,
+    a: u8,
+};
+
+const SCALING = 1;
+const DEFAULT_WINDOW_WIDTH = 960;
+const DEFAULT_WINDOW_HEIGHT = 540;
+const WINDOW_WIDTH = DEFAULT_WINDOW_WIDTH * SCALING;
+const WINDOW_HEIGHT = DEFAULT_WINDOW_HEIGHT * SCALING;
+const BACKGROUND_COLOR = Color{ .r = 0x18, .g = 0x18, .b = 0x18, .a = 255 };
 
 const FPS = 60;
 const FRAME_TARGET_TIME_MS = 1000 / FPS;
 const DELTA_TIME_SEC: f32 = 1.0 / @intToFloat(f32, FPS);
 
-const PROJ_SPEED: i32 = 300;
+const PROJ_SPEED: i32 = @divTrunc(WINDOW_WIDTH, 3);
 const PROJ_WIDTH = 30;
 const PROJ_HEIGHT = 30;
+const PROJ_COLOR = Color{ .r = 255, .g = 255, .b = 255, .a = 255 };
 
 const BAR_HEIGHT = 20;
 const BAR_WIDTH = 80;
-const BAR_START_X = 400;
-const BAR_START_Y = 500;
-const BAR_ACC_CHANGE: i32 = 1000;
-const BAR_SPEED: i32 = PROJ_SPEED + 1; // bigger than PROJ_SPEED to prevent Proj sticking to Bar
+const BAR_START_X = @divTrunc(WINDOW_WIDTH, 2) - @divTrunc(BAR_WIDTH, 2);
+const BAR_START_Y = 7 * @divTrunc(WINDOW_HEIGHT, 8);
+const BAR_SPEED: i32 = PROJ_SPEED - 1; // smaller than PROJ_SPEED to prevent Proj sticking to Bar
+const BAR_COLOR = Color{ .r = 255, .g = 51, .b = 51, .a = 255 };
 
-const BAR_DRAG: f32 = 0.01;
-const BAR_MAX_SPEED: i32 = 700;
-const BAR_MAX_ACC: i32 = BAR_ACC_CHANGE * FPS;
-
-const TARGET_SPACE_HEIGHT = @divTrunc(WINDOW_HEIGHT, 3);
-const TARGET_SPACE_WIDTH = @divTrunc(WINDOW_WIDTH, 4) * 3;
-const TARGET_NUMBER_HEIGHT = 4;
-const TARGET_NUMBER_WIDTH = 6;
-const TARGET_NUMBER = TARGET_NUMBER_HEIGHT * TARGET_NUMBER_WIDTH;
+const TARGET_X_SPACING = 10;
+const TARGET_Y_SPACING = 10;
+const TARGET_Y_NUMBER = 9 * SCALING;
+const TARGET_X_NUMBER = 9 * SCALING;
 const TARGET_WIDTH = BAR_WIDTH;
 const TARGET_HEIGHT = BAR_HEIGHT;
-const TARGET_Y_PADDING = @divTrunc(WINDOW_HEIGHT, 8);
+const TARGET_SPACE_HEIGHT = TARGET_Y_SPACING * (TARGET_Y_NUMBER - 1) + TARGET_HEIGHT * TARGET_Y_NUMBER;
+const TARGET_SPACE_WIDTH = TARGET_X_SPACING * (TARGET_X_NUMBER - 1) + TARGET_WIDTH * TARGET_X_NUMBER;
+const TARGET_NUMBER = TARGET_Y_NUMBER * TARGET_X_NUMBER;
+const TARGET_Y_PADDING = @divTrunc(WINDOW_HEIGHT, 10);
 const TARGET_X_PADDING = @divTrunc(WINDOW_WIDTH - TARGET_SPACE_WIDTH, 2);
 
 pub const Vector2D = struct {
@@ -130,7 +140,7 @@ pub fn createProjRect(proj: *const Projectile) sdl.SDL_Rect {
 
 pub fn drawProj(proj: *const Projectile, renderer: *sdl.SDL_Renderer) void {
     const rect = createProjRect(proj);
-    _ = sdl.SDL_SetRenderDrawColor(renderer, 0xFF, 0x00, 0x00, 0xFF);
+    _ = sdl.SDL_SetRenderDrawColor(renderer, PROJ_COLOR.r, PROJ_COLOR.g, PROJ_COLOR.b, PROJ_COLOR.a);
     _ = sdl.SDL_RenderFillRect(renderer, &rect);
 }
 
@@ -173,18 +183,24 @@ pub fn updateBar(bar: *Bar) void {
 
 pub fn drawBar(proj: *const Bar, renderer: *sdl.SDL_Renderer) void {
     const rect = createBarRect(proj);
-    _ = sdl.SDL_SetRenderDrawColor(renderer, 0xFF, 0xFF, 0x00, 0xFF);
+    _ = sdl.SDL_SetRenderDrawColor(renderer, BAR_COLOR.r, BAR_COLOR.g, BAR_COLOR.b, BAR_COLOR.a);
     _ = sdl.SDL_RenderFillRect(renderer, &rect);
 }
 
 pub const Target = struct {
     pos: Vector2D,
     is_alive: bool = true,
+    color: Color = Color{
+        .r = 0x00,
+        .g = 0xFF,
+        .b = 0x00,
+        .a = 0xFF,
+    },
 };
 
 pub fn createTargets() [TARGET_NUMBER]Target {
-    const dx = @divTrunc(TARGET_SPACE_WIDTH, TARGET_NUMBER_WIDTH);
-    const dy = @divTrunc(TARGET_SPACE_HEIGHT, TARGET_NUMBER_HEIGHT);
+    const dx = @divTrunc(TARGET_SPACE_WIDTH, TARGET_X_NUMBER);
+    const dy = @divTrunc(TARGET_SPACE_HEIGHT, TARGET_Y_NUMBER);
     // FIXME: Fix alignemnet.
     // const align_x = dx - TARGET_WIDTH;
     // const align_y = dy - TARGET_HEIGHT;
@@ -192,8 +208,8 @@ pub fn createTargets() [TARGET_NUMBER]Target {
     var targets: [TARGET_NUMBER]Target = undefined;
     var idx: i32 = 0;
     for (targets) |*target| {
-        const idx_x = @mod(idx, TARGET_NUMBER_WIDTH);
-        const idx_y = @divTrunc(idx, TARGET_NUMBER_WIDTH);
+        const idx_x = @mod(idx, TARGET_X_NUMBER);
+        const idx_y = @divTrunc(idx, TARGET_X_NUMBER);
         var pos_x = TARGET_X_PADDING + dx * idx_x;
         var pos_y = TARGET_Y_PADDING + dy * idx_y;
         // if (idx_x > 0) {
@@ -222,14 +238,14 @@ pub fn drawTargets(targets: *const [TARGET_NUMBER]Target, renderer: *sdl.SDL_Ren
     for (targets) |*target| {
         if (target.is_alive) {
             const rect = createTargetRect(target);
-            _ = sdl.SDL_SetRenderDrawColor(renderer, 0x00, 0xFF, 0xFF, 0xFF);
+            _ = sdl.SDL_SetRenderDrawColor(renderer, target.color.r, target.color.g, target.color.b, target.color.a);
             _ = sdl.SDL_RenderFillRect(renderer, &rect);
         }
     }
 }
 
 pub fn drawBackground(renderer: *sdl.SDL_Renderer) void {
-    _ = sdl.SDL_SetRenderDrawColor(renderer, 0x18, 0x18, 0x18, 0xFF);
+    _ = sdl.SDL_SetRenderDrawColor(renderer, BACKGROUND_COLOR.r, BACKGROUND_COLOR.g, BACKGROUND_COLOR.b, BACKGROUND_COLOR.a);
     _ = sdl.SDL_RenderClear(renderer);
 }
 
@@ -253,6 +269,12 @@ pub fn main() !void {
     };
 
     defer sdl.SDL_DestroyRenderer(renderer);
+
+    // enable transparent mode
+    if (sdl.SDL_SetRenderDrawBlendMode(renderer, sdl.SDL_BLENDMODE_BLEND) != 0) {
+        sdl.SDL_Log("Unable to set blend/transparent mode: %s", sdl.SDL_GetError());
+        return error.SDLBlendModeFailed;
+    }
 
     const keyboard_state = sdl.SDL_GetKeyboardState(null);
 
