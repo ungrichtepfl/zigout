@@ -12,32 +12,32 @@ pub const Color = struct {
 };
 
 const SCALING = 1;
-const DEFAULT_WINDOW_WIDTH = 960;
-const DEFAULT_WINDOW_HEIGHT = 540;
+const DEFAULT_WINDOW_WIDTH = 1200;
+const DEFAULT_WINDOW_HEIGHT = 900;
 const WINDOW_WIDTH = DEFAULT_WINDOW_WIDTH * SCALING;
 const WINDOW_HEIGHT = DEFAULT_WINDOW_HEIGHT * SCALING;
-const BACKGROUND_COLOR = Color{ .r = 0x18, .g = 0x18, .b = 0x18, .a = 255 };
+const BACKGROUND_COLOR = Color{ .r = 0x18, .g = 0x18, .b = 0x18, .a = 0xFF };
 
 const FPS = 60;
 const FRAME_TARGET_TIME_MS = 1000 / FPS;
 const DELTA_TIME_SEC: f32 = 1.0 / @intToFloat(f32, FPS);
 
-const PROJ_SPEED: i32 = @divTrunc(WINDOW_WIDTH, 3);
+const PROJ_SPEED: i32 = 350;
 const PROJ_WIDTH = 30;
 const PROJ_HEIGHT = 30;
-const PROJ_COLOR = Color{ .r = 255, .g = 255, .b = 255, .a = 255 };
+const PROJ_COLOR = Color{ .r = 230, .g = 230, .b = 230, .a = 230 };
 
 const BAR_HEIGHT = 20;
 const BAR_WIDTH = 80;
 const BAR_START_X = @divTrunc(WINDOW_WIDTH, 2) - @divTrunc(BAR_WIDTH, 2);
 const BAR_START_Y = 7 * @divTrunc(WINDOW_HEIGHT, 8);
 const BAR_SPEED: i32 = PROJ_SPEED - 1; // smaller than PROJ_SPEED to prevent Proj sticking to Bar
-const BAR_COLOR = Color{ .r = 255, .g = 51, .b = 51, .a = 255 };
+const BAR_COLOR = Color{ .r = 255, .g = 46, .b = 46, .a = 255 };
 
 const TARGET_X_SPACING = 10;
 const TARGET_Y_SPACING = 10;
-const TARGET_Y_NUMBER = 9 * SCALING;
-const TARGET_X_NUMBER = 9 * SCALING;
+const TARGET_Y_NUMBER = 10 * SCALING;
+const TARGET_X_NUMBER = 10 * SCALING;
 const TARGET_WIDTH = BAR_WIDTH;
 const TARGET_HEIGHT = BAR_HEIGHT;
 const TARGET_SPACE_HEIGHT = TARGET_Y_SPACING * (TARGET_Y_NUMBER - 1) + TARGET_HEIGHT * TARGET_Y_NUMBER;
@@ -189,41 +189,120 @@ pub fn drawBar(proj: *const Bar, renderer: *sdl.SDL_Renderer) void {
 
 pub const Target = struct {
     pos: Vector2D,
-    is_alive: bool = true,
-    color: Color = Color{
-        .r = 0x00,
-        .g = 0xFF,
-        .b = 0x00,
-        .a = 0xFF,
-    },
+    is_alive: bool,
+    color: Color,
 };
+
+const LinearColor = struct {
+    r: f32,
+    g: f32,
+    b: f32,
+    a: f32,
+};
+
+fn color_u8_to_f32(x: u8) f32 {
+    return @intToFloat(f32, x) / 255.0;
+}
+
+fn color_f32_to_u8(x: f32) u8 {
+    return @floatToInt(u8, x * 255.0);
+}
+
+fn to_linear(x: u8) f32 {
+    const f = color_u8_to_f32(x);
+    const f2 = if (f <= 0.04045) f / 12.92 else math.pow(f32, (f + 0.055) / 1.055, 2.4);
+    return f2;
+}
+
+fn srgb_to_linear(color: *const Color) LinearColor {
+    return LinearColor{
+        .r = to_linear(color.r),
+        .g = to_linear(color.g),
+        .b = to_linear(color.b),
+        .a = color_u8_to_f32(color.a),
+    };
+}
+
+fn to_srgb(x: f32) u8 {
+    const f = if (x <= 0.0031308) x * 12.92 else 1.055 * math.pow(f32, x, 1.0 / 2.4) - 0.055;
+    return color_f32_to_u8(f);
+}
+
+fn linear_to_srgb(color: *const LinearColor) Color {
+    return Color{
+        .r = to_srgb(color.r),
+        .g = to_srgb(color.g),
+        .b = to_srgb(color.b),
+        .a = color_f32_to_u8(color.a),
+    };
+}
+
+fn lerp_color_gamma_corrected(color1: *const Color, color2: *const Color, t: f32) Color {
+    const c1 = srgb_to_linear(color1);
+    const c2 = srgb_to_linear(color2);
+    const c = lerp_color(&c1, &c2, t);
+    return linear_to_srgb(&c);
+}
+
+fn lerp_color(color1: *const LinearColor, color2: *const LinearColor, t: f32) LinearColor {
+    var vec1 = [_]f32{ color1.r, color1.g, color1.b, color1.a };
+    var vec2 = [_]f32{ color2.r, color2.g, color2.b, color2.a };
+    var res = [_]f32{ 0, 0, 0, 0 };
+    for (vec1) |*v1, i| {
+        res[i] = v1.* + (vec2[i] - v1.*) * t;
+    }
+    return LinearColor{
+        .r = res[0],
+        .g = res[1],
+        .b = res[2],
+        .a = res[3],
+    };
+}
 
 pub fn createTargets() [TARGET_NUMBER]Target {
     const dx = @divTrunc(TARGET_SPACE_WIDTH, TARGET_X_NUMBER);
     const dy = @divTrunc(TARGET_SPACE_HEIGHT, TARGET_Y_NUMBER);
-    // FIXME: Fix alignemnet.
-    // const align_x = dx - TARGET_WIDTH;
-    // const align_y = dy - TARGET_HEIGHT;
+    // Shift the targets to the right so that they are centered:
+    const align_dx = @divTrunc(dx - TARGET_WIDTH, TARGET_X_NUMBER - 1);
+    const align_dy = @divTrunc(dy - TARGET_HEIGHT, TARGET_Y_NUMBER - 1);
 
     var targets: [TARGET_NUMBER]Target = undefined;
     var idx: i32 = 0;
+    const red = Color{
+        .r = 255,
+        .g = 46,
+        .b = 46,
+        .a = 255,
+    };
+    const green = Color{
+        .r = 46,
+        .g = 255,
+        .b = 46,
+        .a = 255,
+    };
+    const blue = Color{
+        .r = 46,
+        .g = 46,
+        .b = 255,
+        .a = 255,
+    };
+    const level = 0.5;
+
     for (targets) |*target| {
         const idx_x = @mod(idx, TARGET_X_NUMBER);
         const idx_y = @divTrunc(idx, TARGET_X_NUMBER);
-        var pos_x = TARGET_X_PADDING + dx * idx_x;
-        var pos_y = TARGET_Y_PADDING + dy * idx_y;
-        // if (idx_x > 0) {
-        //     pos_y += align_y;
-        // }
-        // if (idx_y > 0) {
-        //     pos_x += align_x;
-        // // }
-        // std.debug.print("({}, {})\tx: {}\t y: {}\n", .{ idx_x, idx_y, pos_x, pos_y });
+        var pos_x = TARGET_X_PADDING + (dx + align_dx) * idx_x;
+        var pos_y = TARGET_Y_PADDING + (dy + align_dy) * idx_y;
+
+        const t = @intToFloat(f32, idx_y) / @intToFloat(f32, TARGET_Y_NUMBER);
+        const target_color = if (t < level) lerp_color_gamma_corrected(&red, &green, t / level) else lerp_color_gamma_corrected(&green, &blue, (t - level) / (1 - level));
         target.* = Target{
             .pos = Vector2D{
                 .x = pos_x,
                 .y = pos_y,
             },
+            .is_alive = true,
+            .color = target_color,
         };
         idx += 1;
     }
