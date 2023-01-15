@@ -1,6 +1,7 @@
 const std = @import("std");
 const sdl = @cImport({
     @cInclude("SDL2/SDL.h");
+    @cInclude("SDL2/SDL_ttf.h");
 });
 const math = std.math;
 
@@ -8,7 +9,7 @@ pub const Color = struct {
     r: u8,
     g: u8,
     b: u8,
-    a: u8,
+    a: u8 = 0xFF,
 };
 
 const SCALING = 1;
@@ -16,7 +17,8 @@ const DEFAULT_WINDOW_WIDTH = 1200;
 const DEFAULT_WINDOW_HEIGHT = 900;
 const WINDOW_WIDTH = DEFAULT_WINDOW_WIDTH * SCALING;
 const WINDOW_HEIGHT = DEFAULT_WINDOW_HEIGHT * SCALING;
-const BACKGROUND_COLOR = Color{ .r = 0x18, .g = 0x18, .b = 0x18, .a = 0xFF };
+const BACKGROUND_COLOR = Color{ .r = 0x18, .g = 0x18, .b = 0x18 };
+const TEXT_COLOR = Color{ .r = 255, .g = 46, .b = 46 };
 
 const FPS = 60;
 const FRAME_TARGET_TIME_MS = 1000 / FPS;
@@ -25,14 +27,14 @@ const DELTA_TIME_SEC: f32 = 1.0 / @intToFloat(f32, FPS);
 const PROJ_SPEED: i32 = 350;
 const PROJ_WIDTH = 30;
 const PROJ_HEIGHT = 30;
-const PROJ_COLOR = Color{ .r = 230, .g = 230, .b = 230, .a = 230 };
+const PROJ_COLOR = Color{ .r = 230, .g = 230, .b = 230 };
 
 const BAR_HEIGHT = 20;
 const BAR_WIDTH = 80;
 const BAR_START_X = @divTrunc(WINDOW_WIDTH, 2) - @divTrunc(BAR_WIDTH, 2);
 const BAR_START_Y = 7 * @divTrunc(WINDOW_HEIGHT, 8);
 const BAR_SPEED: i32 = PROJ_SPEED - 1; // smaller than PROJ_SPEED to prevent Proj sticking to Bar
-const BAR_COLOR = Color{ .r = 255, .g = 46, .b = 46, .a = 255 };
+const BAR_COLOR = Color{ .r = 255, .g = 46, .b = 46 };
 
 const TARGET_X_SPACING = 10;
 const TARGET_Y_SPACING = 10;
@@ -51,7 +53,7 @@ pub const Vector2D = struct {
     y: i32,
 };
 
-pub fn createRect(x: i32, y: i32, w: i32, h: i32) sdl.SDL_Rect {
+pub fn createSdlRect(x: i32, y: i32, w: i32, h: i32) sdl.SDL_Rect {
     return sdl.SDL_Rect{
         .x = x,
         .y = y,
@@ -92,8 +94,8 @@ pub const Projectile = struct {
 pub fn updateProj(proj: *Projectile, targets: *[TARGET_NUMBER]Target, bar: *const Bar) void {
     const n_pos = addVec(&proj.pos, &vecMult(&proj.vel, DELTA_TIME_SEC));
     const barRect = createBarRect(bar);
-    const projRect_x = createRect(n_pos.x, proj.pos.y, PROJ_WIDTH, PROJ_HEIGHT);
-    const projRect_y = createRect(proj.pos.x, n_pos.y, PROJ_WIDTH, PROJ_HEIGHT);
+    const projRect_x = createSdlRect(n_pos.x, proj.pos.y, PROJ_WIDTH, PROJ_HEIGHT);
+    const projRect_y = createSdlRect(proj.pos.x, n_pos.y, PROJ_WIDTH, PROJ_HEIGHT);
 
     var intersects_target_x = false;
     var intersects_target_y = false;
@@ -114,18 +116,32 @@ pub fn updateProj(proj: *Projectile, targets: *[TARGET_NUMBER]Target, bar: *cons
         proj.vel.x = -proj.vel.x;
     }
     const intersects_bar_y = sdl.SDL_HasIntersection(&barRect, &projRect_y) != 0;
-    if (proj.pos.y < 0 or proj.pos.y + PROJ_HEIGHT > WINDOW_HEIGHT or intersects_bar_y or intersects_target_y) {
+    if (n_pos.y < 0 or n_pos.y + PROJ_HEIGHT > WINDOW_HEIGHT or intersects_bar_y or intersects_target_y) {
         proj.vel.y = -proj.vel.y;
     }
 
     addToVec(&proj.pos, &vecMult(&proj.vel, DELTA_TIME_SEC));
 }
 
-pub fn createProj() Projectile {
+pub fn hasLost(proj: *const Projectile) bool {
+    const n_pos = addVec(&proj.pos, &vecMult(&proj.vel, DELTA_TIME_SEC));
+    return n_pos.y + PROJ_WIDTH > WINDOW_HEIGHT;
+}
+
+pub fn hasWon(targets: *[TARGET_NUMBER]Target) bool {
+    for (targets) |*target| {
+        if (target.is_alive) {
+            return false;
+        }
+    }
+    return true;
+}
+
+pub fn initialProj() Projectile {
     return Projectile{
         .pos = Vector2D{
-            .x = 0,
-            .y = 0,
+            .x = BAR_START_X + @divTrunc(BAR_WIDTH, 2) - @divTrunc(PROJ_WIDTH, 2),
+            .y = BAR_START_Y - PROJ_HEIGHT,
         },
         .vel = Vector2D{
             .x = PROJ_SPEED,
@@ -135,7 +151,7 @@ pub fn createProj() Projectile {
 }
 
 pub fn createProjRect(proj: *const Projectile) sdl.SDL_Rect {
-    return createRect(proj.pos.x, proj.pos.y, PROJ_WIDTH, PROJ_HEIGHT);
+    return createSdlRect(proj.pos.x, proj.pos.y, PROJ_WIDTH, PROJ_HEIGHT);
 }
 
 pub fn drawProj(proj: *const Projectile, renderer: *sdl.SDL_Renderer) void {
@@ -149,7 +165,7 @@ pub const Bar = struct {
     vel: i32,
 };
 
-pub fn createBar() Bar {
+pub fn initialBar() Bar {
     return Bar{
         .pos = Vector2D{
             .x = BAR_START_X,
@@ -160,18 +176,18 @@ pub fn createBar() Bar {
 }
 
 pub fn createBarRect(bar: *const Bar) sdl.SDL_Rect {
-    return createRect(bar.pos.x, bar.pos.y, BAR_WIDTH, BAR_HEIGHT);
+    return createSdlRect(bar.pos.x, bar.pos.y, BAR_WIDTH, BAR_HEIGHT);
 }
 
-pub fn moveBarLeft(bar: *Bar) void {
-    moveBar(bar, -1);
+pub fn setBarSpeedLeft(bar: *Bar) void {
+    setBarSpeedDir(bar, -1);
 }
 
-pub fn moveBarRight(bar: *Bar) void {
-    moveBar(bar, 1);
+pub fn setBarSpeedRight(bar: *Bar) void {
+    setBarSpeedDir(bar, 1);
 }
 
-fn moveBar(bar: *Bar, direction: i32) void {
+fn setBarSpeedDir(bar: *Bar, direction: i32) void {
     bar.vel = direction * BAR_SPEED;
 }
 
@@ -259,7 +275,7 @@ fn lerp_color(color1: *const LinearColor, color2: *const LinearColor, t: f32) Li
     };
 }
 
-pub fn createTargets() [TARGET_NUMBER]Target {
+pub fn initialTargets() [TARGET_NUMBER]Target {
     const dx = @divTrunc(TARGET_SPACE_WIDTH, TARGET_X_NUMBER);
     const dy = @divTrunc(TARGET_SPACE_HEIGHT, TARGET_Y_NUMBER);
     // Shift the targets to the right so that they are centered:
@@ -310,7 +326,7 @@ pub fn createTargets() [TARGET_NUMBER]Target {
 }
 
 pub fn createTargetRect(target: *const Target) sdl.SDL_Rect {
-    return createRect(target.pos.x, target.pos.y, TARGET_WIDTH, TARGET_HEIGHT);
+    return createSdlRect(target.pos.x, target.pos.y, TARGET_WIDTH, TARGET_HEIGHT);
 }
 
 pub fn drawTargets(targets: *const [TARGET_NUMBER]Target, renderer: *sdl.SDL_Renderer) void {
@@ -328,12 +344,90 @@ pub fn drawBackground(renderer: *sdl.SDL_Renderer) void {
     _ = sdl.SDL_RenderClear(renderer);
 }
 
+pub fn renderText(renderer: *sdl.SDL_Renderer, text: [*]const u8, color: *const Color, pos: *const Vector2D, font: *sdl.TTF_Font) void {
+    const sdl_color = colorToSdlColor(color);
+    const surface: *sdl.SDL_Surface = sdl.TTF_RenderText_Solid(font, text, sdl_color) orelse {
+        std.debug.print("TTF_RenderText_Solid: {s}\n", .{sdl.TTF_GetError()});
+        return;
+    };
+    defer sdl.SDL_FreeSurface(surface);
+    renderSurface(renderer, surface, pos);
+}
+
+pub fn renderXYCenteredText(renderer: *sdl.SDL_Renderer, text: [*]const u8, color: *const Color, font: *sdl.TTF_Font) void {
+    const sdl_color = colorToSdlColor(color);
+    const surface: *sdl.SDL_Surface = sdl.TTF_RenderText_Solid(font, text, sdl_color) orelse {
+        std.debug.print("TTF_RenderText_Solid: {s}\n", .{sdl.TTF_GetError()});
+        return;
+    };
+    defer sdl.SDL_FreeSurface(surface);
+    const pos = Vector2D{
+        .x = @divTrunc(WINDOW_WIDTH - surface.w, 2),
+        .y = @divTrunc(WINDOW_HEIGHT - surface.h, 2),
+    };
+    renderSurface(renderer, surface, &pos);
+}
+
+pub fn renderYCenteredText(renderer: *sdl.SDL_Renderer, text: [*]const u8, color: *const Color, x_pos: i32, font: *sdl.TTF_Font) void {
+    const sdl_color = colorToSdlColor(color);
+    const surface: *sdl.SDL_Surface = sdl.TTF_RenderText_Solid(font, text, sdl_color) orelse {
+        std.debug.print("TTF_RenderText_Solid: {s}\n", .{sdl.TTF_GetError()});
+        return;
+    };
+    defer sdl.SDL_FreeSurface(surface);
+    const pos = Vector2D{
+        .x = x_pos,
+        .y = @divTrunc(WINDOW_HEIGHT - surface.h, 2),
+    };
+    renderSurface(renderer, surface, &pos);
+}
+
+fn colorToSdlColor(color: *const Color) sdl.SDL_Color {
+    return sdl.SDL_Color{
+        .r = color.r,
+        .g = color.g,
+        .b = color.b,
+        .a = color.a,
+    };
+}
+
+pub fn renderXCenteredText(renderer: *sdl.SDL_Renderer, text: [*]const u8, color: *const Color, y_pos: i32, font: *sdl.TTF_Font) void {
+    const sdl_color = colorToSdlColor(color);
+    const surface: *sdl.SDL_Surface = sdl.TTF_RenderText_Solid(font, text, sdl_color) orelse {
+        std.debug.print("TTF_RenderText_Solid: {s}\n", .{sdl.TTF_GetError()});
+        return;
+    };
+    defer sdl.SDL_FreeSurface(surface);
+    const pos = Vector2D{
+        .x = @divTrunc(WINDOW_WIDTH - surface.w, 2),
+        .y = y_pos,
+    };
+    renderSurface(renderer, surface, &pos);
+}
+
+pub fn renderSurface(renderer: *sdl.SDL_Renderer, surface: *sdl.SDL_Surface, pos: *const Vector2D) void {
+    const texture = sdl.SDL_CreateTextureFromSurface(renderer, surface) orelse {
+        std.debug.print("SDL_CreateTextureFromSurface: {s}\n", .{sdl.SDL_GetError()});
+        return;
+    };
+    defer sdl.SDL_DestroyTexture(texture);
+
+    const rect = createSdlRect(pos.x, pos.y, surface.w, surface.h);
+    _ = sdl.SDL_RenderCopy(renderer, texture, null, &rect);
+}
+
 pub fn main() !void {
     if (sdl.SDL_Init(sdl.SDL_INIT_VIDEO) != 0) {
         sdl.SDL_Log("Unable to initialize SDL: %s", sdl.SDL_GetError());
         return error.SDLInitializationFailed;
     }
     defer sdl.SDL_Quit();
+
+    if (sdl.TTF_Init() != 0) {
+        sdl.SDL_Log("Unable to initialize SDL_ttf: %s", sdl.TTF_GetError());
+        return error.SDLInitializationFailed;
+    }
+    defer sdl.TTF_Quit();
 
     const window = sdl.SDL_CreateWindow("Zigout", 0, 0, WINDOW_WIDTH, WINDOW_HEIGHT, 0) orelse {
         sdl.SDL_Log("Unable to create window: %s", sdl.SDL_GetError());
@@ -357,11 +451,22 @@ pub fn main() !void {
 
     const keyboard_state = sdl.SDL_GetKeyboardState(null);
 
+    const game_font = sdl.TTF_OpenFont("Lato-Regular.ttf", 28) orelse {
+        sdl.SDL_Log("Unable to load font: %s", sdl.TTF_GetError());
+        return error.SDLFontLoadingFailed;
+    };
+
+    // ---- State of the game ---- //
     var quit = false;
     var pause = false;
-    var proj = createProj();
-    var bar = createBar();
-    var targets = createTargets();
+    var started = false;
+    var reset = false;
+    var won = false;
+    var lost = false;
+    var bar = initialBar();
+    var proj = initialProj();
+    var targets = initialTargets();
+    // --------------------------- //
 
     drawBackground(renderer);
     drawProj(&proj, renderer);
@@ -376,7 +481,8 @@ pub fn main() !void {
                 sdl.SDL_KEYDOWN => {
                     switch (event.key.keysym.sym) {
                         'q' => quit = true,
-                        'p' => pause = !pause,
+                        ' ' => pause = !pause,
+                        'r' => reset = true,
                         else => {},
                     }
                 },
@@ -384,24 +490,62 @@ pub fn main() !void {
             }
         }
 
-        const a_pressed = keyboard_state[sdl.SDL_SCANCODE_A] != 0;
-        const d_pressed = keyboard_state[sdl.SDL_SCANCODE_D] != 0;
-        if (a_pressed and !d_pressed) {
-            moveBarLeft(&bar);
-        } else if (d_pressed and !a_pressed) {
-            moveBarRight(&bar);
-        } else {
-            bar.vel = 0;
+        if (reset) {
+            bar = initialBar();
+            proj = initialProj();
+            targets = initialTargets();
+            started = false;
+            reset = false;
+            pause = false;
+            won = false;
+            lost = false;
         }
 
-        if (!pause) {
-            updateProj(&proj, &targets, &bar);
-            updateBar(&bar);
+        const a_pressed = keyboard_state[sdl.SDL_SCANCODE_A] != 0;
+        const d_pressed = keyboard_state[sdl.SDL_SCANCODE_D] != 0;
+
+        if (!started and (a_pressed or d_pressed)) {
+            started = true;
+            proj.vel.x = if (a_pressed) -PROJ_SPEED else PROJ_SPEED;
         }
+
+        if (!pause and started) {
+            if (!won and !lost) {
+                if (a_pressed and !d_pressed) {
+                    setBarSpeedLeft(&bar);
+                } else if (d_pressed and !a_pressed) {
+                    setBarSpeedRight(&bar);
+                } else {
+                    bar.vel = 0;
+                }
+                updateBar(&bar);
+
+                lost = hasLost(&proj); // must be before proj has been updated
+                updateProj(&proj, &targets, &bar);
+
+                won = hasWon(&targets);
+            } else if (won) {
+                won = true;
+            } else {
+                // lost
+                lost = true;
+            }
+        }
+
         drawBackground(renderer);
         drawProj(&proj, renderer);
         drawBar(&bar, renderer);
         drawTargets(&targets, renderer);
+
+        if (!started) {
+            renderXYCenteredText(renderer, "Press A or D to move the bar and start the game. While playing press Space to pause.", &TEXT_COLOR, game_font);
+        } else if (pause) {
+            renderXYCenteredText(renderer, "Press Space to unpause.", &TEXT_COLOR, game_font);
+        } else if (won) {
+            renderXYCenteredText(renderer, "You won! Press R to restart.", &TEXT_COLOR, game_font);
+        } else if (lost) {
+            renderXYCenteredText(renderer, "You lost! Press R to restart.", &TEXT_COLOR, game_font);
+        }
 
         sdl.SDL_RenderPresent(renderer);
         sdl.SDL_Delay(FRAME_TARGET_TIME_MS);
