@@ -13,6 +13,9 @@ pub const Color = struct {
     a: u8 = 0xFF,
 };
 
+const SAVE_HIGHSCORE = true;
+const HIGHSCORE_FILE_NAME = "highscore.txt";
+
 const SCALING = 1;
 const DEFAULT_WINDOW_WIDTH = 1200;
 const DEFAULT_WINDOW_HEIGHT = 900;
@@ -497,15 +500,37 @@ pub fn drawParticles(particles: *const [PARTICLE_NUMBER]Particle, renderer: *sdl
     }
 }
 
-var SCORE_TEXT_BUF = std.mem.zeroes([100]u8);
+var TEXT_BUF = std.mem.zeroes([100]u8);
 
 pub fn writeScore(score: u64, highscore: u64, renderer: *sdl.SDL_Renderer, score_font: *sdl.TTF_Font) void {
-    SCORE_TEXT_BUF = std.mem.zeroes(@TypeOf(SCORE_TEXT_BUF));
-    const scoreText = std.fmt.bufPrint(&SCORE_TEXT_BUF, "Score: {d}", .{score}) catch unreachable;
+    TEXT_BUF = std.mem.zeroes(@TypeOf(TEXT_BUF));
+    const scoreText = std.fmt.bufPrint(&TEXT_BUF, "Score: {d}", .{score}) catch unreachable;
     renderText(renderer, scoreText.ptr, &TEXT_COLOR, &.{ .x = 10, .y = 10 }, score_font);
-    SCORE_TEXT_BUF = std.mem.zeroes(@TypeOf(SCORE_TEXT_BUF));
-    const highscoreText = std.fmt.bufPrint(&SCORE_TEXT_BUF, "Best: {d}", .{highscore}) catch unreachable;
+    TEXT_BUF = std.mem.zeroes(@TypeOf(TEXT_BUF));
+    const highscoreText = std.fmt.bufPrint(&TEXT_BUF, "Best: {d}", .{highscore}) catch unreachable;
     renderText(renderer, highscoreText.ptr, &TEXT_COLOR, &.{ .x = 10, .y = 30 }, score_font);
+}
+
+pub fn readHighscore() !u64 {
+    const file = try std.fs.cwd().openFile(
+        HIGHSCORE_FILE_NAME,
+        .{},
+    );
+    defer file.close();
+    TEXT_BUF = std.mem.zeroes(@TypeOf(TEXT_BUF));
+    const size = try file.readAll(&TEXT_BUF);
+    return try std.fmt.parseInt(u64, TEXT_BUF[0..size], 10);
+}
+
+pub fn saveHighscore(highscore: u64) void {
+    const file = std.fs.cwd().createFile(
+        HIGHSCORE_FILE_NAME,
+        .{},
+    ) catch return;
+    defer file.close();
+    TEXT_BUF = std.mem.zeroes(@TypeOf(TEXT_BUF));
+    const highscoreText = std.fmt.bufPrint(&TEXT_BUF, "{d}", .{highscore}) catch unreachable;
+    _ = file.writeAll(highscoreText) catch return;
 }
 
 pub fn main() !void {
@@ -568,6 +593,10 @@ pub fn main() !void {
     var particles = initialParticles();
     // --------------------------- //
 
+    if (SAVE_HIGHSCORE) {
+        highscore = readHighscore() catch 0;
+    }
+
     drawBackground(renderer);
     drawProj(&proj, renderer);
     drawBar(&bar, renderer);
@@ -599,6 +628,7 @@ pub fn main() !void {
             pause = false;
             won = false;
             lost = false;
+            score = 0;
         }
 
         const a_pressed = keyboard_state[sdl.SDL_SCANCODE_A] != 0;
@@ -626,7 +656,9 @@ pub fn main() !void {
 
                 won = hasWon(&targets);
             } else {
-                highscore = score;
+                if (score > highscore) {
+                    highscore = score;
+                }
             }
         }
 
@@ -650,5 +682,9 @@ pub fn main() !void {
 
         sdl.SDL_RenderPresent(renderer);
         sdl.SDL_Delay(FRAME_TARGET_TIME_MS);
+    }
+
+    if (SAVE_HIGHSCORE) {
+        saveHighscore(highscore);
     }
 }
