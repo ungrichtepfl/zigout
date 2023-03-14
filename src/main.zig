@@ -4,6 +4,7 @@ const sdl = @cImport({
     @cInclude("SDL2/SDL_ttf.h");
 });
 const math = std.math;
+var rand = std.rand.DefaultPrng.init(42);
 
 pub const Color = struct {
     r: u8,
@@ -48,13 +49,23 @@ const TARGET_NUMBER = TARGET_Y_NUMBER * TARGET_X_NUMBER;
 const TARGET_Y_PADDING = @divTrunc(WINDOW_HEIGHT, 10);
 const TARGET_X_PADDING = @divTrunc(WINDOW_WIDTH - TARGET_SPACE_WIDTH, 2);
 
+const PARTICLE_NUMBER = 1000;
+const PARTICLE_TO_EMIT = 30;
+const PARTICLE_TO_EMIT_VARIABILITY = @divTrunc(PARTICLE_TO_EMIT, 4) * 2;
+const PARTICLE_SIZE = 10;
+const PARTICLE_SIZE_VARIABLILIY = PARTICLE_SIZE - 1;
+const PARTICLE_SPEED = 5;
+const PARTICLE_SPEED_VARIABILITY = PARTICLE_SPEED - 1;
+const PARTICLE_LIFETIME_SEC = 2;
+const PARTICLE_LIFETIME_SEC_VARIABILITY = 1.5;
+
 pub const Vector2D = struct {
     x: i32,
     y: i32,
 };
 
 pub fn createSdlRect(x: i32, y: i32, w: i32, h: i32) sdl.SDL_Rect {
-    return sdl.SDL_Rect{
+    return .{
         .x = x,
         .y = y,
         .w = w,
@@ -63,7 +74,7 @@ pub fn createSdlRect(x: i32, y: i32, w: i32, h: i32) sdl.SDL_Rect {
 }
 
 pub fn vecMult(vec: *const Vector2D, scalar: f32) Vector2D {
-    return Vector2D{
+    return .{
         .x = @floatToInt(i32, @intToFloat(f32, vec.x) * scalar),
         .y = @floatToInt(i32, @intToFloat(f32, vec.y) * scalar),
     };
@@ -80,10 +91,28 @@ pub fn addToVec(a: *Vector2D, b: *const Vector2D) void {
 }
 
 pub fn addVec(a: *const Vector2D, b: *const Vector2D) Vector2D {
-    return Vector2D{
+    return .{
         .x = a.x + b.x,
         .y = a.y + b.y,
     };
+}
+
+pub const Particle = struct {
+    pos: Vector2D = .{ .x = 0, .y = 0 },
+    color: Color = .{ .r = 255, .g = 46, .b = 46 },
+    angle: f32 = 0, // between [0,2*pi)
+    size: i32 = PARTICLE_SIZE,
+    speed: i32 = PARTICLE_SPEED,
+    time_alive_sec: f32 = -1.0, // < 0 indicates not active
+    max_time_alive_sec: f32 = PARTICLE_LIFETIME_SEC,
+};
+
+pub fn initialParticles() [PARTICLE_NUMBER]Particle {
+    return [_]Particle{Particle{}} ** PARTICLE_NUMBER;
+}
+
+pub fn createParticleRect(particle: *const Particle) sdl.SDL_Rect {
+    return createSdlRect(particle.pos.x, particle.pos.y, particle.size, particle.size);
 }
 
 pub const Projectile = struct {
@@ -91,7 +120,28 @@ pub const Projectile = struct {
     vel: Vector2D,
 };
 
-pub fn updateProj(proj: *Projectile, targets: *[TARGET_NUMBER]Target, bar: *const Bar) void {
+pub fn emitParticles(particles: *[PARTICLE_NUMBER]Particle, target: *const Target) void {
+    var emitted: usize = 0;
+    const to_emit = PARTICLE_TO_EMIT + @floatToInt(i32, (rand.random().float(f32) - 0.5) * PARTICLE_TO_EMIT_VARIABILITY);
+    for (particles) |*particle| {
+        if (particle.time_alive_sec < 0) {
+            particle.time_alive_sec = 0;
+            particle.color = target.color;
+            particle.max_time_alive_sec += (rand.random().float(f32) - 0.5) * PARTICLE_LIFETIME_SEC_VARIABILITY;
+            particle.speed += @floatToInt(i32, (rand.random().float(f32) - 0.5) * PARTICLE_SPEED_VARIABILITY);
+            particle.size += @floatToInt(i32, (rand.random().float(f32) - 0.5) * PARTICLE_SIZE_VARIABLILIY);
+            particle.pos.x = target.pos.x + @divTrunc(TARGET_WIDTH, 2) - @divTrunc(particle.size, 2);
+            particle.pos.y = target.pos.y + @divTrunc(TARGET_HEIGHT, 2) - @divTrunc(particle.size, 2);
+            particle.angle = rand.random().float(f32) * math.tau;
+            emitted += 1;
+            if (emitted >= to_emit) {
+                break;
+            }
+        }
+    }
+}
+
+pub fn updateProj(proj: *Projectile, targets: *[TARGET_NUMBER]Target, particles: *[PARTICLE_NUMBER]Particle, bar: *const Bar) void {
     const n_pos = addVec(&proj.pos, &vecMult(&proj.vel, DELTA_TIME_SEC));
     const barRect = createBarRect(bar);
     const projRect_x = createSdlRect(n_pos.x, proj.pos.y, PROJ_WIDTH, PROJ_HEIGHT);
@@ -106,6 +156,7 @@ pub fn updateProj(proj: *Projectile, targets: *[TARGET_NUMBER]Target, bar: *cons
             intersects_target_y = sdl.SDL_HasIntersection(&targetRect, &projRect_y) != 0;
             if (intersects_target_x or intersects_target_y) {
                 target.is_alive = false;
+                emitParticles(particles, target);
                 break;
             }
         }
@@ -139,11 +190,11 @@ pub fn hasWon(targets: *[TARGET_NUMBER]Target) bool {
 
 pub fn initialProj() Projectile {
     return Projectile{
-        .pos = Vector2D{
+        .pos = .{
             .x = BAR_START_X + @divTrunc(BAR_WIDTH, 2) - @divTrunc(PROJ_WIDTH, 2),
             .y = BAR_START_Y - PROJ_HEIGHT,
         },
-        .vel = Vector2D{
+        .vel = .{
             .x = PROJ_SPEED,
             .y = PROJ_SPEED,
         },
@@ -166,8 +217,8 @@ pub const Bar = struct {
 };
 
 pub fn initialBar() Bar {
-    return Bar{
-        .pos = Vector2D{
+    return .{
+        .pos = .{
             .x = BAR_START_X,
             .y = BAR_START_Y,
         },
@@ -195,6 +246,24 @@ pub fn updateBar(bar: *Bar) void {
     var nx = bar.pos.x + @floatToInt(i32, @intToFloat(f32, bar.vel) * DELTA_TIME_SEC);
     nx = math.clamp(nx, 0, WINDOW_WIDTH - BAR_WIDTH);
     bar.pos.x = nx;
+}
+
+pub fn updateParticles(particles: *[PARTICLE_NUMBER]Particle) void {
+    for (particles) |*particle| {
+        if (particle.time_alive_sec >= 0) {
+            particle.time_alive_sec += DELTA_TIME_SEC;
+            if (particle.time_alive_sec >= particle.max_time_alive_sec) {
+                particle.* = Particle{};
+                continue;
+            }
+            particle.pos.x += @floatToInt(i32, @intToFloat(f32, particle.speed) * math.cos(particle.angle));
+            particle.pos.y += @floatToInt(i32, @intToFloat(f32, particle.speed) * math.sin(particle.angle));
+            var color = particle.color;
+            const alpha = 255.0 * (1 - particle.time_alive_sec / particle.max_time_alive_sec);
+            color.a = @floatToInt(u8, alpha);
+            particle.color = color;
+        }
+    }
 }
 
 pub fn drawBar(proj: *const Bar, renderer: *sdl.SDL_Renderer) void {
@@ -245,7 +314,7 @@ fn to_srgb(x: f32) u8 {
 }
 
 fn linear_to_srgb(color: *const LinearColor) Color {
-    return Color{
+    return .{
         .r = to_srgb(color.r),
         .g = to_srgb(color.g),
         .b = to_srgb(color.b),
@@ -267,7 +336,7 @@ fn lerp_color(color1: *const LinearColor, color2: *const LinearColor, t: f32) Li
     for (vec1) |*v1, i| {
         res[i] = v1.* + (vec2[i] - v1.*) * t;
     }
-    return LinearColor{
+    return .{
         .r = res[0],
         .g = res[1],
         .b = res[2],
@@ -283,7 +352,6 @@ pub fn initialTargets() [TARGET_NUMBER]Target {
     const align_dy = @divTrunc(dy - TARGET_HEIGHT, TARGET_Y_NUMBER - 1);
 
     var targets: [TARGET_NUMBER]Target = undefined;
-    var idx: i32 = 0;
     const red = Color{
         .r = 255,
         .g = 46,
@@ -304,6 +372,7 @@ pub fn initialTargets() [TARGET_NUMBER]Target {
     };
     const level = 0.5;
 
+    var idx: i32 = 0;
     for (targets) |*target| {
         const idx_x = @mod(idx, TARGET_X_NUMBER);
         const idx_y = @divTrunc(idx, TARGET_X_NUMBER);
@@ -313,7 +382,7 @@ pub fn initialTargets() [TARGET_NUMBER]Target {
         const t = @intToFloat(f32, idx_y) / @intToFloat(f32, TARGET_Y_NUMBER);
         const target_color = if (t < level) lerp_color_gamma_corrected(&red, &green, t / level) else lerp_color_gamma_corrected(&green, &blue, (t - level) / (1 - level));
         target.* = Target{
-            .pos = Vector2D{
+            .pos = .{
                 .x = pos_x,
                 .y = pos_y,
             },
@@ -383,7 +452,7 @@ pub fn renderYCenteredText(renderer: *sdl.SDL_Renderer, text: [*]const u8, color
 }
 
 fn colorToSdlColor(color: *const Color) sdl.SDL_Color {
-    return sdl.SDL_Color{
+    return .{
         .r = color.r,
         .g = color.g,
         .b = color.b,
@@ -414,6 +483,16 @@ pub fn renderSurface(renderer: *sdl.SDL_Renderer, surface: *sdl.SDL_Surface, pos
 
     const rect = createSdlRect(pos.x, pos.y, surface.w, surface.h);
     _ = sdl.SDL_RenderCopy(renderer, texture, null, &rect);
+}
+
+pub fn drawParticles(particles: *const [PARTICLE_NUMBER]Particle, renderer: *sdl.SDL_Renderer) void {
+    for (particles) |*particle| {
+        if (particle.time_alive_sec >= 0) {
+            const rect = createParticleRect(particle);
+            _ = sdl.SDL_SetRenderDrawColor(renderer, particle.color.r, particle.color.g, particle.color.b, particle.color.a);
+            _ = sdl.SDL_RenderFillRect(renderer, &rect);
+        }
+    }
 }
 
 pub fn main() !void {
@@ -466,6 +545,7 @@ pub fn main() !void {
     var bar = initialBar();
     var proj = initialProj();
     var targets = initialTargets();
+    var particles = initialParticles();
     // --------------------------- //
 
     drawBackground(renderer);
@@ -519,9 +599,10 @@ pub fn main() !void {
                     bar.vel = 0;
                 }
                 updateBar(&bar);
+                updateParticles(&particles);
 
                 lost = hasLost(&proj); // must be before proj has been updated
-                updateProj(&proj, &targets, &bar);
+                updateProj(&proj, &targets, &particles, &bar);
 
                 won = hasWon(&targets);
             }
@@ -531,6 +612,7 @@ pub fn main() !void {
         drawProj(&proj, renderer);
         drawBar(&bar, renderer);
         drawTargets(&targets, renderer);
+        drawParticles(&particles, renderer);
 
         if (!started) {
             renderXYCenteredText(renderer, "Press A or D to move the bar and start the game. While playing press SPACE to pause.", &TEXT_COLOR, game_font);
