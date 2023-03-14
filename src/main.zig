@@ -19,7 +19,7 @@ const DEFAULT_WINDOW_HEIGHT = 900;
 const WINDOW_WIDTH = DEFAULT_WINDOW_WIDTH * SCALING;
 const WINDOW_HEIGHT = DEFAULT_WINDOW_HEIGHT * SCALING;
 const BACKGROUND_COLOR = Color{ .r = 0x18, .g = 0x18, .b = 0x18 };
-const TEXT_COLOR = Color{ .r = 255, .g = 46, .b = 46 };
+const TEXT_COLOR = Color{ .r = 0xDC, .g = 0xDC, .b = 0xDC };
 
 const FPS = 60;
 const FRAME_TARGET_TIME_MS = 1000 / FPS;
@@ -48,6 +48,7 @@ const TARGET_SPACE_WIDTH = TARGET_X_SPACING * (TARGET_X_NUMBER - 1) + TARGET_WID
 const TARGET_NUMBER = TARGET_Y_NUMBER * TARGET_X_NUMBER;
 const TARGET_Y_PADDING = @divTrunc(WINDOW_HEIGHT, 10);
 const TARGET_X_PADDING = @divTrunc(WINDOW_WIDTH - TARGET_SPACE_WIDTH, 2);
+const TARGET_SCORE = 100;
 
 const PARTICLE_NUMBER = 1000;
 const PARTICLE_TO_EMIT = 30;
@@ -141,7 +142,7 @@ pub fn emitParticles(particles: *[PARTICLE_NUMBER]Particle, target: *const Targe
     }
 }
 
-pub fn updateProj(proj: *Projectile, targets: *[TARGET_NUMBER]Target, particles: *[PARTICLE_NUMBER]Particle, bar: *const Bar) void {
+pub fn updateProj(proj: *Projectile, targets: *[TARGET_NUMBER]Target, particles: *[PARTICLE_NUMBER]Particle, bar: *const Bar, score: *u64) void {
     const n_pos = addVec(&proj.pos, &vecMult(&proj.vel, DELTA_TIME_SEC));
     const barRect = createBarRect(bar);
     const projRect_x = createSdlRect(n_pos.x, proj.pos.y, PROJ_WIDTH, PROJ_HEIGHT);
@@ -156,6 +157,7 @@ pub fn updateProj(proj: *Projectile, targets: *[TARGET_NUMBER]Target, particles:
             intersects_target_y = sdl.SDL_HasIntersection(&targetRect, &projRect_y) != 0;
             if (intersects_target_x or intersects_target_y) {
                 target.is_alive = false;
+                score.* += TARGET_SCORE;
                 emitParticles(particles, target);
                 break;
             }
@@ -495,6 +497,17 @@ pub fn drawParticles(particles: *const [PARTICLE_NUMBER]Particle, renderer: *sdl
     }
 }
 
+var SCORE_TEXT_BUF = std.mem.zeroes([100]u8);
+
+pub fn writeScore(score: u64, highscore: u64, renderer: *sdl.SDL_Renderer, score_font: *sdl.TTF_Font) void {
+    SCORE_TEXT_BUF = std.mem.zeroes(@TypeOf(SCORE_TEXT_BUF));
+    const scoreText = std.fmt.bufPrint(&SCORE_TEXT_BUF, "Score: {d}", .{score}) catch unreachable;
+    renderText(renderer, scoreText.ptr, &TEXT_COLOR, &.{ .x = 10, .y = 10 }, score_font);
+    SCORE_TEXT_BUF = std.mem.zeroes(@TypeOf(SCORE_TEXT_BUF));
+    const highscoreText = std.fmt.bufPrint(&SCORE_TEXT_BUF, "Best: {d}", .{highscore}) catch unreachable;
+    renderText(renderer, highscoreText.ptr, &TEXT_COLOR, &.{ .x = 10, .y = 30 }, score_font);
+}
+
 pub fn main() !void {
     if (sdl.SDL_Init(sdl.SDL_INIT_VIDEO) != 0) {
         sdl.SDL_Log("Unable to initialize SDL: %s", sdl.SDL_GetError());
@@ -535,6 +548,11 @@ pub fn main() !void {
         return error.SDLFontLoadingFailed;
     };
 
+    const score_font = sdl.TTF_OpenFont("Lato-Regular.ttf", 20) orelse {
+        sdl.SDL_Log("Unable to load font: %s", sdl.TTF_GetError());
+        return error.SDLFontLoadingFailed;
+    };
+
     // ---- State of the game ---- //
     var quit = false;
     var pause = false;
@@ -542,6 +560,8 @@ pub fn main() !void {
     var reset = false;
     var won = false;
     var lost = false;
+    var score: u64 = 0;
+    var highscore: u64 = 0;
     var bar = initialBar();
     var proj = initialProj();
     var targets = initialTargets();
@@ -602,9 +622,11 @@ pub fn main() !void {
                 updateParticles(&particles);
 
                 lost = hasLost(&proj); // must be before proj has been updated
-                updateProj(&proj, &targets, &particles, &bar);
+                updateProj(&proj, &targets, &particles, &bar, &score);
 
                 won = hasWon(&targets);
+            } else {
+                highscore = score;
             }
         }
 
@@ -613,6 +635,7 @@ pub fn main() !void {
         drawBar(&bar, renderer);
         drawTargets(&targets, renderer);
         drawParticles(&particles, renderer);
+        writeScore(score, highscore, renderer, score_font);
 
         if (!started) {
             renderXYCenteredText(renderer, "Press A or D to move the bar and start the game. While playing press SPACE to pause.", &TEXT_COLOR, game_font);
