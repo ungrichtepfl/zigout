@@ -368,7 +368,7 @@ pub fn renderXYCenteredText(renderer: *sdl.SDL_Renderer, text: [*]const u8, colo
     renderSurface(renderer, surface, &pos);
 }
 
-pub fn renderYCenteredText(renderer: *sdl.SDL_Renderer, text: [*]const u8, color: *const Color, x_pos: i32, font: *sdl.TTF_Font) void {
+pub fn renderYCenteredText(renderer: *sdl.SDL_Renderer, text: [*]const u8, color: *const Color, font: *sdl.TTF_Font, x_pos: i32) void {
     const sdl_color = colorToSdlColor(color);
     const surface: *sdl.SDL_Surface = sdl.TTF_RenderText_Solid(font, text, sdl_color) orelse {
         std.debug.print("TTF_RenderText_Solid: {s}\n", .{sdl.TTF_GetError()});
@@ -391,7 +391,7 @@ fn colorToSdlColor(color: *const Color) sdl.SDL_Color {
     };
 }
 
-pub fn renderXCenteredText(renderer: *sdl.SDL_Renderer, text: [*]const u8, color: *const Color, y_pos: i32, font: *sdl.TTF_Font) void {
+pub fn renderXCenteredText(renderer: *sdl.SDL_Renderer, text: [*]const u8, color: *const Color, font: *sdl.TTF_Font, y_pos: i32) void {
     const sdl_color = colorToSdlColor(color);
     const surface: *sdl.SDL_Surface = sdl.TTF_RenderText_Solid(font, text, sdl_color) orelse {
         std.debug.print("TTF_RenderText_Solid: {s}\n", .{sdl.TTF_GetError()});
@@ -524,11 +524,6 @@ pub fn main() !void {
                 updateProj(&proj, &targets, &bar);
 
                 won = hasWon(&targets);
-            } else if (won) {
-                won = true;
-            } else {
-                // lost
-                lost = true;
             }
         }
 
@@ -538,13 +533,14 @@ pub fn main() !void {
         drawTargets(&targets, renderer);
 
         if (!started) {
-            renderXYCenteredText(renderer, "Press A or D to move the bar and start the game. While playing press Space to pause.", &TEXT_COLOR, game_font);
+            renderXYCenteredText(renderer, "Press A or D to move the bar and start the game. While playing press SPACE to pause.", &TEXT_COLOR, game_font);
+            renderXCenteredText(renderer, "Press Q anytime to quit.", &TEXT_COLOR, game_font, @divTrunc(WINDOW_HEIGHT, 2) + 20 * SCALING);
         } else if (pause) {
-            renderXYCenteredText(renderer, "Press Space to unpause.", &TEXT_COLOR, game_font);
+            renderXYCenteredText(renderer, "Press SPACE to unpause or Q to quit.", &TEXT_COLOR, game_font);
         } else if (won) {
-            renderXYCenteredText(renderer, "You won! Press R to restart.", &TEXT_COLOR, game_font);
+            renderXYCenteredText(renderer, "You won! Press R to restart or Q to quit.", &TEXT_COLOR, game_font);
         } else if (lost) {
-            renderXYCenteredText(renderer, "You lost! Press R to restart.", &TEXT_COLOR, game_font);
+            renderXYCenteredText(renderer, "You lost! Press R to restart or Q to quit.", &TEXT_COLOR, game_font);
         }
 
         sdl.SDL_RenderPresent(renderer);
