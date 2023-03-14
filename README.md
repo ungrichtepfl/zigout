@@ -1,4 +1,4 @@
-# zigbreak
+# zigout
 
 Small game in [ZIG](https://ziglang.org/). Followed [tsodings stream](https://www.youtube.com/watch?v=eIX9zER9vjY). Run it using:
 
@@ -8,4 +8,4 @@ zig build run
 
 **Dependencies:**
 
-- SDL2 (Ubuntu: `sudo apt install libsdl2-dev`)
+- SDL2 and SDL2-TTF (Ubuntu: `sudo apt install libsdl2-dev libsdl2-ttf-dev`)
