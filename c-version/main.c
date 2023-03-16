@@ -1,3 +1,3 @@
 #include "cout.h"
 
-int main(int argc, char *argv[]) { return COUT_StartGame(); }
+int main(void) { return COUT_StartGame(); }

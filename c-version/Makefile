@@ -9,9 +9,10 @@ SRC := $(wildcard $(SRC_DIR)/*.c)
 OBJ := $(SRC:$(SRC_DIR)/%.c=$(OBJ_DIR)/%.o)
 
 CPPFLAGS := -I$(INC_DIR) -MMD -MP
-CFLAGS   := -Wall -Wpedantic
+CFLAGS   := -Wall -Wextra -Wpedantic -Werror
 LDFLAGS  := -L$(LIB_DIR)
-LDLIBS   := -lm
+SDL2LIB   := `sdl2-config --cflags --libs` -lSDL2_ttf
+LDLIBS   := -lm $(SDL2LIB)
 
 .PHONY: all
 all: $(EXE)
