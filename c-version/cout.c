@@ -17,6 +17,9 @@ typedef uint32_t color_t;
   (color >> 3 * 8) & 0xFF, (color >> 2 * 8) & 0xFF, (color >> 1 * 8) & 0xFF,   \
       (color >> 0 * 8) & 0xFF
 
+#define UNSPREAD_COLOR(r, g, b, a)                                             \
+  (r << 3 * 8) | (g << 2 * 8) | (b << 1 * 8) | (a << 0 * 8)
+
 static int exit_code = 0;
 #define SET_EXIT_CODE(e)                                                       \
   { exit_code = e; }
@@ -39,7 +42,8 @@ SDL_Color colorToSdlColor(const color_t color) {
   return (SDL_Color){SPREAD_COLOR(color)};
 }
 
-SDL_Rect createSdlRect(int32_t x, int32_t y, int32_t w, int32_t h) {
+SDL_Rect createSdlRect(const int32_t x, const int32_t y, const int32_t w,
+                       const int32_t h) {
   return (SDL_Rect){
       .x = x,
       .y = y,
@@ -48,7 +52,7 @@ SDL_Rect createSdlRect(int32_t x, int32_t y, int32_t w, int32_t h) {
   };
 }
 
-void drawBackground(SDL_Renderer *renderer) {
+void drawBackground(SDL_Renderer *const renderer) {
   if (SDL_SetRenderDrawColor(renderer, SPREAD_COLOR(BACKGROUND_COLOR))) {
     SDL_Log("Could not render background: %s", SDL_GetError());
   }
@@ -57,7 +61,7 @@ void drawBackground(SDL_Renderer *renderer) {
   }
 }
 
-void renderSurface(SDL_Renderer *renderer, SDL_Surface *surface,
+void renderSurface(SDL_Renderer *const renderer, SDL_Surface *const surface,
                    const Vector2D *pos) {
   SDL_Texture *texture = SDL_CreateTextureFromSurface(renderer, surface);
   if (!texture) {
@@ -70,8 +74,9 @@ void renderSurface(SDL_Renderer *renderer, SDL_Surface *surface,
   SDL_DestroyTexture(texture);
 }
 
-void renderText(SDL_Renderer *renderer, const char *text, color_t color,
-                const Vector2D *pos, TTF_Font *font) {
+void renderText(SDL_Renderer *const renderer, const char *const text,
+                color_t color, const Vector2D *const pos,
+                TTF_Font *const font) {
   SDL_Color sdl_color = colorToSdlColor(color);
   SDL_Surface *surface = TTF_RenderText_Solid(font, text, sdl_color);
   if (!surface) {
@@ -82,8 +87,8 @@ void renderText(SDL_Renderer *renderer, const char *text, color_t color,
   SDL_FreeSurface(surface);
 }
 
-void writeScore(uint64_t score, uint64_t highscore, SDL_Renderer *renderer,
-                TTF_Font *score_font) {
+void writeScore(const uint64_t score, const uint64_t highscore,
+                SDL_Renderer *const renderer, TTF_Font *const score_font) {
   char score_text[TEXT_BUF_SIZE];
   sprintf(score_text, "Score: %lu", score);
   renderText(renderer, score_text, TEXT_COLOR, &(Vector2D){.x = 10, .y = 10},
@@ -94,21 +99,21 @@ void writeScore(uint64_t score, uint64_t highscore, SDL_Renderer *renderer,
              score_font);
 }
 
-Vector2D vecMult(const Vector2D *vec, float scalar) {
+Vector2D vecMult(const Vector2D *const vec, const float scalar) {
   return (Vector2D){.x = vec->x * scalar, .y = vec->y * scalar};
 }
 
-void multToVec(Vector2D *const vec, float scalar) {
+void multToVec(Vector2D *const vec, const float scalar) {
   vec->x = vec->x * scalar;
   vec->y = vec->y * scalar;
 }
 
-void addToVec(Vector2D *const a, const Vector2D *b) {
+void addToVec(Vector2D *const a, const Vector2D *const b) {
   a->x += b->x;
   a->y += b->y;
 }
 
-Vector2D addVec(const Vector2D *a, const Vector2D *b) {
+Vector2D addVec(const Vector2D *const a, const Vector2D *const b) {
   return (Vector2D){
       .x = a->x + b->x,
       .y = a->y + b->y,
@@ -124,32 +129,154 @@ Bar initialBar(void) {
   return (Bar){.pos = (Vector2D){.x = BAR_START_X, .y = BAR_START_Y}, .vel = 0};
 }
 
-SDL_Rect createBarRect(const Bar *bar) {
+SDL_Rect createBarRect(const Bar *const bar) {
   return createSdlRect(bar->pos.x, bar->pos.y, BAR_WIDTH, BAR_HEIGHT);
 }
 
-void setBarSpeedDir(Bar *bar, int32_t direction) {
+void setBarSpeedDir(Bar *const bar, const int32_t direction) {
   bar->vel = direction * BAR_SPEED;
 }
 
-void setBarSpeedLeft(Bar *bar) { setBarSpeedDir(bar, -1); }
+void setBarSpeedLeft(Bar *const bar) { setBarSpeedDir(bar, -1); }
 
-void setBarSpeedRight(Bar *bar) { setBarSpeedDir(bar, 1); }
+void setBarSpeedRight(Bar *const bar) { setBarSpeedDir(bar, 1); }
 
-float clamp(float x, float lower, float upper) {
+float clamp(const float x, const float lower, const float upper) {
   return fmax(lower, fmin(x, upper));
 }
 
-void updateBar(Bar *bar) {
-  float nx = bar->pos.x + bar->vel * DELTA_TIME_SEC;
+void updateBar(Bar *const bar) {
+  float nx = bar->pos.x + (float)bar->vel * DELTA_TIME_SEC;
   nx = clamp(nx, 0, WINDOW_WIDTH - BAR_WIDTH);
   bar->pos.x = nx;
 }
 
-void drawBar(const Bar *proj, SDL_Renderer *renderer) {
+void drawBar(const Bar *const proj, SDL_Renderer *const renderer) {
   SDL_Rect rect = createBarRect(proj);
   SDL_SetRenderDrawColor(renderer, SPREAD_COLOR(BAR_COLOR));
   SDL_RenderFillRect(renderer, &rect);
+}
+
+typedef struct Target_s {
+  Vector2D pos;
+  bool is_alive;
+  color_t color;
+} Target;
+
+typedef struct LinearColor_s {
+  float r;
+  float g;
+  float b;
+  float a;
+} LinearColor;
+
+float color_u8_to_f32(const uint8_t x) { return x / 255.0; }
+
+uint8_t color_f32_to_u8(const float x) { return x * 255.0; }
+
+float to_linear(const uint8_t x) {
+  const float f = color_u8_to_f32(x);
+  if (f <= 0.04045)
+    return f / 12.92;
+  else
+    return pow((f + 0.055) / 1.055, 2.4);
+}
+
+LinearColor srgb_to_linear(const uint8_t r, const uint8_t g, const uint8_t b,
+                           const uint8_t a) {
+  return (LinearColor){
+      .r = to_linear(r),
+      .g = to_linear(g),
+      .b = to_linear(b),
+      .a = color_u8_to_f32(a),
+  };
+}
+
+uint8_t to_srgb(const float x) {
+  float f;
+  if (x <= 0.0031308)
+    f = x * 12.92;
+  else
+    f = 1.055 * pow(x, 1.0 / 2.4) - 0.055;
+  return color_f32_to_u8(f);
+}
+
+LinearColor lerp_color(const LinearColor *const color1,
+                       const LinearColor *const color2, const float t) {
+  const float vec1[] = {color1->r, color1->g, color1->b, color1->a};
+  const float vec2[] = {color2->r, color2->g, color2->b, color2->a};
+  float res[] = {0, 0, 0, 0};
+  for (int i = 0; i < 4; i++)
+    res[i] = vec1[i] + (vec2[i] - vec1[i]) * t;
+  return (LinearColor){
+      .r = res[0],
+      .g = res[1],
+      .b = res[2],
+      .a = res[3],
+  };
+}
+
+color_t linear_to_srgb(const LinearColor *const color) {
+  return UNSPREAD_COLOR(to_srgb(color->r), to_srgb(color->g), to_srgb(color->b),
+                        color_f32_to_u8(color->a));
+}
+
+color_t lerp_color_gamma_corrected(const color_t color1, const color_t color2,
+                                   const float t) {
+  const LinearColor c1 = srgb_to_linear(SPREAD_COLOR(color1));
+  const LinearColor c2 = srgb_to_linear(SPREAD_COLOR(color2));
+  const LinearColor c = lerp_color(&c1, &c2, t);
+  return linear_to_srgb(&c);
+}
+
+void initializeTargets(Target targets[TARGET_NUMBER]) {
+  const int32_t dx = TARGET_SPACE_WIDTH / TARGET_X_NUMBER;
+  const int32_t dy = TARGET_SPACE_HEIGHT / TARGET_Y_NUMBER;
+  // Shift the targets to the right so that they are centered:
+  const int32_t align_dx = (dx - TARGET_WIDTH) / (TARGET_X_NUMBER - 1);
+  const int32_t align_dy = (dy - TARGET_HEIGHT) / (TARGET_Y_NUMBER - 1);
+
+  const color_t red = 0xFF2E2EFF;
+  const color_t green = 0x2EFF2EFF;
+  const color_t blue = 0x2E2EFFFF;
+  const float level = 0.5;
+
+  for (uint32_t idx = 0; idx < TARGET_NUMBER; idx++) {
+    const uint32_t idx_x = idx % TARGET_X_NUMBER;
+    const uint32_t idx_y = idx / TARGET_X_NUMBER;
+    const uint32_t pos_x = TARGET_X_PADDING + (dx + align_dx) * idx_x;
+    const uint32_t pos_y = TARGET_Y_PADDING + (dy + align_dy) * idx_y;
+
+    const float t = (float)idx_y / TARGET_Y_NUMBER;
+    color_t target_color;
+    if (t < level)
+      target_color = lerp_color_gamma_corrected(red, green, t / level);
+    else
+      target_color =
+          lerp_color_gamma_corrected(green, blue, (t - level) / (1 - level));
+    targets[idx].pos = (Vector2D){
+        .x = pos_x,
+        .y = pos_y,
+    };
+    targets[idx].is_alive = true;
+    targets[idx].color = target_color;
+  }
+}
+
+SDL_Rect createTargetRect(const Target *const target) {
+  return createSdlRect(target->pos.x, target->pos.y, TARGET_WIDTH,
+                       TARGET_HEIGHT);
+}
+
+void drawTargets(const Target targets[TARGET_NUMBER],
+                 SDL_Renderer *const renderer) {
+  for (int i = 0; i < TARGET_NUMBER; i++) {
+    if (targets[i].is_alive) {
+      const SDL_Rect rect = createTargetRect(&targets[i]);
+      SDL_SetRenderDrawColor(renderer, SPREAD_COLOR(targets[i].color));
+      SDL_RenderFillRect(renderer, &rect);
+    }
+  }
 }
 
 typedef struct Particle_s {
@@ -238,7 +365,8 @@ int COUT_StartGame(void) {
   uint64_t highscore = 0;
   Bar bar = initialBar();
   // var proj = initialProj();
-  // var targets = initialTargets();
+  Target targets[TARGET_NUMBER];
+  initializeTargets(targets);
   Particle particles[PARTICLE_NUMBER];
   initializeParticles(particles);
   // --------------------------- //
@@ -250,7 +378,7 @@ int COUT_StartGame(void) {
   drawBackground(renderer);
   // drawProj(&proj, renderer);
   drawBar(&bar, renderer);
-  // drawTargets(&targets, renderer);
+  drawTargets(targets, renderer);
 
   while (!quit) {
     SDL_Event event;
@@ -287,7 +415,7 @@ int COUT_StartGame(void) {
     if (reset) {
       bar = initialBar();
       // proj = initialProj();
-      // targets = initialTargets();
+      initializeTargets(targets);
       initializeParticles(particles);
       started = false;
       reset = false;
@@ -331,9 +459,8 @@ int COUT_StartGame(void) {
     drawBackground(renderer);
     // drawProj(&proj, renderer);
     drawBar(&bar, renderer);
-    // drawTargets(&targets, renderer);
+    drawTargets(targets, renderer);
     // drawParticles(&particles, renderer);
-    // FIXME: Why is nothing shown:
     writeScore(score, highscore, renderer, score_font);
 
     if (!started) {
