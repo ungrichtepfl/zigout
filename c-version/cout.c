@@ -14,6 +14,7 @@ typedef enum { false, true } bool;
 typedef uint32_t color_t;
 
 #define SIGN(x) (x >= 0 ? 1 : -1)
+#define FCLAMP(x, lower, upper) fmax(lower, fmin(x, upper))
 
 #define SPREAD_COLOR(color)                                                    \
   (color >> 3 * 8) & 0xFF, (color >> 2 * 8) & 0xFF, (color >> 1 * 8) & 0xFF,   \
@@ -202,13 +203,9 @@ void setBarSpeedLeft(Bar *const bar) { setBarSpeedDir(bar, -1); }
 
 void setBarSpeedRight(Bar *const bar) { setBarSpeedDir(bar, 1); }
 
-float clamp(const float x, const float lower, const float upper) {
-  return fmax(lower, fmin(x, upper));
-}
-
 void updateBar(Bar *const bar) {
   float nx = bar->pos.x + (float)bar->vel * DELTA_TIME_SEC;
-  nx = clamp(nx, 0, WINDOW_WIDTH - BAR_WIDTH);
+  nx = FCLAMP(nx, 0, WINDOW_WIDTH - BAR_WIDTH);
   bar->pos.x = nx;
 }
 
