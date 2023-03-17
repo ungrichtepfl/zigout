@@ -13,22 +13,28 @@ typedef enum { false, true } bool;
 
 typedef uint32_t color_t;
 
+#define SIGN(x) (x >= 0 ? 1 : -1)
+
 #define SPREAD_COLOR(color)                                                    \
   (color >> 3 * 8) & 0xFF, (color >> 2 * 8) & 0xFF, (color >> 1 * 8) & 0xFF,   \
       (color >> 0 * 8) & 0xFF
+
+#define SET_ALPHA(color, alpha) (~(~color | 0xFF) | alpha)
 
 #define UNSPREAD_COLOR(r, g, b, a)                                             \
   (r << 3 * 8) | (g << 2 * 8) | (b << 1 * 8) | (a << 0 * 8)
 
 static int exit_code = 0;
 #define SET_EXIT_CODE(e)                                                       \
-  { exit_code = e; }
+  do {                                                                         \
+    exit_code = e;                                                             \
+  } while (0)
 
 #define EXIT_WITH(e)                                                           \
-  {                                                                            \
+  do {                                                                         \
     SET_EXIT_CODE(e);                                                          \
     goto quit;                                                                 \
-  }
+  } while (0)
 
 #define EXIT() EXIT_WITH(1)
 
@@ -120,13 +126,20 @@ Vector2D addVec(const Vector2D *const a, const Vector2D *const b) {
   };
 }
 
+typedef struct Projectile_s {
+  Vector2D pos;
+  Vector2D vel;
+} Projectile;
+
 typedef struct Bar_s {
   Vector2D pos;
   int32_t vel;
 } Bar;
 
 Bar initialBar(void) {
-  return (Bar){.pos = (Vector2D){.x = BAR_START_X, .y = BAR_START_Y}, .vel = 0};
+  return (Bar){.pos = (Vector2D){.x = (float)(uint32_t)BAR_START_X,
+                                 .y = (float)(uint32_t)BAR_START_Y},
+               .vel = 0};
 }
 
 SDL_Rect createBarRect(const Bar *const bar) {
@@ -193,11 +206,8 @@ LinearColor srgb_to_linear(const uint8_t r, const uint8_t g, const uint8_t b,
 }
 
 uint8_t to_srgb(const float x) {
-  float f;
-  if (x <= 0.0031308)
-    f = x * 12.92;
-  else
-    f = 1.055 * pow(x, 1.0 / 2.4) - 0.055;
+  const float f =
+      (x <= 0.0031308) ? x * 12.92 : 1.055 * pow(x, 1.0 / 2.4) - 0.055;
   return color_f32_to_u8(f);
 }
 
@@ -285,25 +295,170 @@ typedef struct Particle_s {
   float angle; // between [0,2*pi)
   int32_t size;
   int32_t speed;
-  int32_t time_alive_sec; // < 0 indicates not active
-  int32_t max_time_alive_sec;
+  float time_alive_sec; // < 0 indicates not active
+  float max_time_alive_sec;
 } Particle;
 
+void initializeParticle(Particle *const particle) {
+  particle->pos = (Vector2D){0, 0};
+  particle->color = 0xFF4040FF;
+  particle->angle = 0;
+  particle->size = PARTICLE_SIZE;
+  particle->speed = PARTICLE_SPEED;
+  particle->time_alive_sec = -1.0;
+  particle->max_time_alive_sec = PARTICLE_LIFETIME_SEC;
+}
+
 void initializeParticles(Particle particles[PARTICLE_NUMBER]) {
-  for (int i = 0; i < PARTICLE_NUMBER; i++) {
-    particles[i].pos = (Vector2D){0, 0};
-    particles[i].color = 0xFF4040FF;
-    particles[i].angle = 0;
-    particles[i].size = PARTICLE_SIZE;
-    particles[i].speed = PARTICLE_SPEED;
-    particles[i].time_alive_sec = -1.0;
-    particles[i].max_time_alive_sec = PARTICLE_LIFETIME_SEC;
-  }
+  for (int i = 0; i < PARTICLE_NUMBER; i++)
+    initializeParticle(&particles[i]);
 }
 
 SDL_Rect createParticleRect(const Particle *particle) {
   return createSdlRect(particle->pos.x, particle->pos.y, particle->size,
                        particle->size);
+}
+void updateParticles(Particle particles[PARTICLE_NUMBER]) {
+  for (int i = 0; i < PARTICLE_NUMBER; i++) {
+    if (particles[i].time_alive_sec >= 0) {
+      particles[i].time_alive_sec += DELTA_TIME_SEC;
+      if (particles[i].time_alive_sec >= particles[i].max_time_alive_sec) {
+        initializeParticle(&particles[i]);
+        continue;
+      }
+      particles[i].pos.x += particles[i].speed * cos(particles[i].angle);
+      particles[i].pos.y += particles[i].speed * sin(particles[i].angle);
+      const uint8_t alpha = 0xFF * (1 - particles[i].time_alive_sec /
+                                            particles[i].max_time_alive_sec);
+      const color_t color = SET_ALPHA(particles[i].color, alpha);
+      particles[i].color = color;
+    }
+  }
+}
+
+void drawParticles(const Particle particles[PARTICLE_NUMBER],
+                   SDL_Renderer *const renderer) {
+  for (int i = 0; i < PARTICLE_NUMBER; i++) {
+    if (particles[i].time_alive_sec >= 0) {
+      const SDL_Rect rect = createParticleRect(&particles[i]);
+      SDL_SetRenderDrawColor(renderer, SPREAD_COLOR(particles[i].color));
+      SDL_RenderFillRect(renderer, &rect);
+    }
+  }
+}
+
+void emitParticles(Particle particles[PARTICLE_NUMBER],
+                   const Target *const target) {
+  size_t emitted = 0;
+  const size_t to_emit =
+      PARTICLE_TO_EMIT +
+      (drand48() - 0.5) * (float)(uint32_t)PARTICLE_TO_EMIT_VARIABILITY;
+  for (int i = 0; i < PARTICLE_NUMBER; i++) {
+    if (particles[i].time_alive_sec < 0) {
+      particles[i].time_alive_sec = 0;
+      particles[i].color = target->color;
+      particles[i].max_time_alive_sec +=
+          (drand48() - 0.5) * PARTICLE_LIFETIME_SEC_VARIABILITY;
+      particles[i].speed += (drand48() - 0.5) * PARTICLE_SPEED_VARIABILITY;
+      particles[i].size += (drand48() - 0.5) * PARTICLE_SIZE_VARIABLILIY;
+      particles[i].pos.x =
+          target->pos.x + TARGET_WIDTH / 2.0 - particles[i].size / 2.0;
+      particles[i].pos.y =
+          target->pos.y + TARGET_HEIGHT / 2.0 - particles[i].size / 2.0;
+      particles[i].angle = drand48() * 2 * M_PI;
+      emitted += 1;
+      if (emitted >= to_emit) {
+        break;
+      }
+    }
+  }
+}
+
+void updateProj(Projectile *const proj, Target targets[TARGET_NUMBER],
+                Particle particles[PARTICLE_NUMBER], const Bar *const bar,
+                uint64_t *const score) {
+  const Vector2D n_speed = vecMult(&proj->vel, DELTA_TIME_SEC);
+  const Vector2D n_pos = addVec(&proj->pos, &n_speed);
+  const SDL_Rect barRect = createBarRect(bar);
+  const SDL_Rect projRect_x =
+      createSdlRect(n_pos.x, proj->pos.y, PROJ_WIDTH, PROJ_HEIGHT);
+  const SDL_Rect projRect_y =
+      createSdlRect(proj->pos.x, n_pos.y, PROJ_WIDTH, PROJ_HEIGHT);
+
+  bool intersects_target_x = false;
+  bool intersects_target_y = false;
+  for (int i = 0; i < TARGET_NUMBER; i++) {
+    if (targets[i].is_alive) {
+      const SDL_Rect targetRect = createTargetRect(&targets[i]);
+      intersects_target_x = SDL_HasIntersection(&targetRect, &projRect_x) != 0;
+      intersects_target_y = SDL_HasIntersection(&targetRect, &projRect_y) != 0;
+      if (intersects_target_x || intersects_target_y) {
+        targets[i].is_alive = false;
+        (*score) += TARGET_SCORE;
+        emitParticles(particles, &targets[i]);
+        break;
+      }
+    }
+  }
+
+  const bool intersects_bar_x = SDL_HasIntersection(&barRect, &projRect_x) != 0;
+  if (n_pos.x < 0 || n_pos.x + PROJ_WIDTH > WINDOW_WIDTH || intersects_bar_x ||
+      intersects_target_x) {
+    proj->vel.x = -proj->vel.x;
+  }
+  const bool intersects_bar_y = SDL_HasIntersection(&barRect, &projRect_y) != 0;
+  if (n_pos.y < 0 || n_pos.y + PROJ_HEIGHT > WINDOW_HEIGHT ||
+      intersects_bar_y || intersects_target_y) {
+    proj->vel.y = -proj->vel.y;
+  }
+  if (intersects_bar_y) {
+    if (abs(bar->vel) > 0) {
+      proj->vel.x = SIGN(bar->vel) * fabs(proj->vel.x);
+    }
+  }
+  const Vector2D speed_updated = vecMult(&proj->vel, DELTA_TIME_SEC);
+  addToVec(&proj->pos, &speed_updated);
+}
+
+bool hasLost(const Projectile *const proj) {
+  const Vector2D speed = vecMult(&proj->vel, DELTA_TIME_SEC);
+  const Vector2D n_pos = addVec(&proj->pos, &speed);
+  return n_pos.y + PROJ_WIDTH > WINDOW_HEIGHT;
+}
+
+bool hasWon(Target targets[TARGET_NUMBER]) {
+  for (int i = 0; i < TARGET_NUMBER; i++) {
+    if (targets[i].is_alive) {
+      return false;
+    }
+  }
+  return true;
+}
+
+Projectile initialProj() {
+  return (Projectile){
+      .pos =
+          (Vector2D){
+              .x = (float)(uint32_t)BAR_START_X + BAR_WIDTH / 2.0 -
+                   PROJ_WIDTH / 2.0,
+              .y = (float)(uint32_t)BAR_START_Y - PROJ_HEIGHT,
+          },
+      .vel =
+          (Vector2D){
+              .x = PROJ_SPEED,
+              .y = PROJ_SPEED,
+          },
+  };
+}
+
+SDL_Rect createProjRect(const Projectile *const proj) {
+  return createSdlRect(proj->pos.x, proj->pos.y, PROJ_WIDTH, PROJ_HEIGHT);
+}
+
+void drawProj(const Projectile *const proj, SDL_Renderer *const renderer) {
+  SDL_Rect rect = createProjRect(proj);
+  SDL_SetRenderDrawColor(renderer, SPREAD_COLOR(PROJ_COLOR));
+  SDL_RenderFillRect(renderer, &rect);
 }
 
 int COUT_StartGame(void) {
@@ -364,7 +519,7 @@ int COUT_StartGame(void) {
   uint64_t score = 0;
   uint64_t highscore = 0;
   Bar bar = initialBar();
-  // var proj = initialProj();
+  Projectile proj = initialProj();
   Target targets[TARGET_NUMBER];
   initializeTargets(targets);
   Particle particles[PARTICLE_NUMBER];
@@ -376,7 +531,7 @@ int COUT_StartGame(void) {
 #endif
 
   drawBackground(renderer);
-  // drawProj(&proj, renderer);
+  drawProj(&proj, renderer);
   drawBar(&bar, renderer);
   drawTargets(targets, renderer);
 
@@ -414,7 +569,7 @@ int COUT_StartGame(void) {
 
     if (reset) {
       bar = initialBar();
-      // proj = initialProj();
+      proj = initialProj();
       initializeTargets(targets);
       initializeParticles(particles);
       started = false;
@@ -430,7 +585,7 @@ int COUT_StartGame(void) {
 
     if (!started && (a_pressed || d_pressed)) {
       started = true;
-      // proj.vel.x = if (a_pressed) - PROJ_SPEED else PROJ_SPEED;
+      proj.vel.x = a_pressed ? -PROJ_SPEED : PROJ_SPEED;
     }
 
     if (!pause && started) {
@@ -443,24 +598,24 @@ int COUT_StartGame(void) {
           bar.vel = 0;
         }
         updateBar(&bar);
-        // updateParticles(&particles);
-        //
-        // lost = hasLost(&proj); // must be before proj has been
-        // updated updateProj(&proj, &targets, &particles, &bar, &score);
-        //
-        // won = hasWon(&targets);
+        updateParticles(particles);
+
+        lost = hasLost(&proj); // must be before proj has been update
+        updateProj(&proj, targets, particles, &bar, &score);
+
+        won = hasWon(targets);
       } else {
         if (score > highscore) {
-          // highscore = score;
+          highscore = score;
         }
       }
     }
 
     drawBackground(renderer);
-    // drawProj(&proj, renderer);
+    drawProj(&proj, renderer);
     drawBar(&bar, renderer);
     drawTargets(targets, renderer);
-    // drawParticles(&particles, renderer);
+    drawParticles(particles, renderer);
     writeScore(score, highscore, renderer, score_font);
 
     if (!started) {
