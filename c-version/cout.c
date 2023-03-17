@@ -5,13 +5,16 @@
 
 #include "cout.h"
 
+#define FONT_FILEPATH "../Lato-Regular.ttf"
+#define TEXT_BUF_SIZE 100
+
 typedef enum { false, true } bool;
 
 typedef uint32_t color_t;
 
 #define SPREAD_COLOR(color)                                                    \
-  (color >> 0 * 8) && 0xFF, (color >> 1 * 8) && 0xFF,                          \
-      (color >> 2 * 8) && 0xFF, (color >> 3 * 8) && 0xFF
+  (color >> 3 * 8) & 0xFF, (color >> 2 * 8) & 0xFF, (color >> 1 * 8) & 0xFF,   \
+      (color >> 0 * 8) & 0xFF
 
 static int exit_code = 0;
 #define SET_EXIT_CODE(e)                                                       \
@@ -45,8 +48,12 @@ SDL_Rect createSdlRect(int32_t x, int32_t y, int32_t w, int32_t h) {
 }
 
 void drawBackground(SDL_Renderer *renderer) {
-  SDL_SetRenderDrawColor(renderer, SPREAD_COLOR(BACKGROUND_COLOR));
-  SDL_RenderClear(renderer);
+  if (SDL_SetRenderDrawColor(renderer, SPREAD_COLOR(BACKGROUND_COLOR))) {
+    SDL_Log("Could not render background: %s", SDL_GetError());
+  }
+  if (SDL_RenderClear(renderer)) {
+    SDL_Log("Could not render background: %s", SDL_GetError());
+  }
 }
 
 void renderSurface(SDL_Renderer *renderer, SDL_Surface *surface,
@@ -76,11 +83,11 @@ void renderText(SDL_Renderer *renderer, const char *text, color_t color,
 
 void writeScore(uint64_t score, uint64_t highscore, SDL_Renderer *renderer,
                 TTF_Font *score_font) {
-  char score_text[100];
+  char score_text[TEXT_BUF_SIZE];
   sprintf(score_text, "Score: %lu", score);
   renderText(renderer, score_text, TEXT_COLOR, &(Vector2D){.x = 10, .y = 10},
              score_font);
-  char highscoreText[100];
+  char highscoreText[TEXT_BUF_SIZE];
   sprintf(highscoreText, "Best: %lu", highscore);
   renderText(renderer, highscoreText, TEXT_COLOR, &(Vector2D){.x = 10, .y = 30},
              score_font);
@@ -89,6 +96,8 @@ void writeScore(uint64_t score, uint64_t highscore, SDL_Renderer *renderer,
 int COUT_StartGame(void) {
   SDL_Window *window = NULL;
   SDL_Renderer *renderer = NULL;
+  TTF_Font *game_font = NULL;
+  TTF_Font *score_font = NULL;
 
   if (SDL_Init(SDL_INIT_VIDEO)) {
     SDL_Log("Unable to initialize SDL: %s", SDL_GetError());
@@ -120,13 +129,13 @@ int COUT_StartGame(void) {
 
   const Uint8 *keyboard_state = SDL_GetKeyboardState(NULL);
 
-  TTF_Font *game_font = TTF_OpenFont("../Lato-Regular.ttf", 28);
+  game_font = TTF_OpenFont(FONT_FILEPATH, 28);
   if (!game_font) {
     SDL_Log("Unable to load font: %s", TTF_GetError());
     EXIT();
   }
 
-  TTF_Font *score_font = TTF_OpenFont("../Lato-Regular.ttf", 20);
+  score_font = TTF_OpenFont(FONT_FILEPATH, 20);
   if (!score_font) {
     SDL_Log("Unable to load font: %s", TTF_GetError());
     EXIT();
@@ -270,9 +279,11 @@ int COUT_StartGame(void) {
 #endif
 
 quit:
-  SDL_Quit();
+  TTF_CloseFont(game_font);
+  TTF_CloseFont(score_font);
   TTF_Quit();
-  SDL_DestroyWindow(window);
   SDL_DestroyRenderer(renderer);
+  SDL_DestroyWindow(window);
+  SDL_Quit();
   return exit_code;
 }
