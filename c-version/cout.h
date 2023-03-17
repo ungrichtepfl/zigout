@@ -25,7 +25,7 @@
 
 #define BAR_HEIGHT 20
 #define BAR_WIDTH 80
-#define BAR_START_X (WINDOW_WIDTH / 2 - BAR_WIDTH / 2
+#define BAR_START_X (WINDOW_WIDTH / 2 - BAR_WIDTH / 2)
 #define BAR_START_Y (7 * WINDOW_HEIGHT / 8)
 #define BAR_SPEED                                                              \
   (PROJ_SPEED - 1) // smaller than PROJ_SPEED to prevent Proj sticking to Bar

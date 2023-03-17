@@ -1,5 +1,6 @@
 #include <SDL2/SDL.h>
 #include <SDL2/SDL_ttf.h>
+#include <math.h>
 #include <stdint.h>
 #include <stdio.h>
 
@@ -93,6 +94,91 @@ void writeScore(uint64_t score, uint64_t highscore, SDL_Renderer *renderer,
              score_font);
 }
 
+Vector2D vecMult(const Vector2D *vec, float scalar) {
+  return (Vector2D){.x = vec->x * scalar, .y = vec->y * scalar};
+}
+
+void multToVec(Vector2D *const vec, float scalar) {
+  vec->x = vec->x * scalar;
+  vec->y = vec->y * scalar;
+}
+
+void addToVec(Vector2D *const a, const Vector2D *b) {
+  a->x += b->x;
+  a->y += b->y;
+}
+
+Vector2D addVec(const Vector2D *a, const Vector2D *b) {
+  return (Vector2D){
+      .x = a->x + b->x,
+      .y = a->y + b->y,
+  };
+}
+
+typedef struct Bar_s {
+  Vector2D pos;
+  int32_t vel;
+} Bar;
+
+Bar initialBar(void) {
+  return (Bar){.pos = (Vector2D){.x = BAR_START_X, .y = BAR_START_Y}, .vel = 0};
+}
+
+SDL_Rect createBarRect(const Bar *bar) {
+  return createSdlRect(bar->pos.x, bar->pos.y, BAR_WIDTH, BAR_HEIGHT);
+}
+
+void setBarSpeedDir(Bar *bar, int32_t direction) {
+  bar->vel = direction * BAR_SPEED;
+}
+
+void setBarSpeedLeft(Bar *bar) { setBarSpeedDir(bar, -1); }
+
+void setBarSpeedRight(Bar *bar) { setBarSpeedDir(bar, 1); }
+
+float clamp(float x, float lower, float upper) {
+  return fmax(lower, fmin(x, upper));
+}
+
+void updateBar(Bar *bar) {
+  float nx = bar->pos.x + bar->vel * DELTA_TIME_SEC;
+  nx = clamp(nx, 0, WINDOW_WIDTH - BAR_WIDTH);
+  bar->pos.x = nx;
+}
+
+void drawBar(const Bar *proj, SDL_Renderer *renderer) {
+  SDL_Rect rect = createBarRect(proj);
+  SDL_SetRenderDrawColor(renderer, SPREAD_COLOR(BAR_COLOR));
+  SDL_RenderFillRect(renderer, &rect);
+}
+
+typedef struct Particle_s {
+  Vector2D pos;
+  color_t color;
+  float angle; // between [0,2*pi)
+  int32_t size;
+  int32_t speed;
+  int32_t time_alive_sec; // < 0 indicates not active
+  int32_t max_time_alive_sec;
+} Particle;
+
+void initializeParticles(Particle particles[PARTICLE_NUMBER]) {
+  for (int i = 0; i < PARTICLE_NUMBER; i++) {
+    particles[i].pos = (Vector2D){0, 0};
+    particles[i].color = 0xFF4040FF;
+    particles[i].angle = 0;
+    particles[i].size = PARTICLE_SIZE;
+    particles[i].speed = PARTICLE_SPEED;
+    particles[i].time_alive_sec = -1.0;
+    particles[i].max_time_alive_sec = PARTICLE_LIFETIME_SEC;
+  }
+}
+
+SDL_Rect createParticleRect(const Particle *particle) {
+  return createSdlRect(particle->pos.x, particle->pos.y, particle->size,
+                       particle->size);
+}
+
 int COUT_StartGame(void) {
   SDL_Window *window = NULL;
   SDL_Renderer *renderer = NULL;
@@ -150,10 +236,11 @@ int COUT_StartGame(void) {
   bool lost = false;
   uint64_t score = 0;
   uint64_t highscore = 0;
-  // var bar = initialBar();
+  Bar bar = initialBar();
   // var proj = initialProj();
   // var targets = initialTargets();
-  // var particles = initialParticles();
+  Particle particles[PARTICLE_NUMBER];
+  initializeParticles(particles);
   // --------------------------- //
 
 #if SAVE_HIGHSCORE
@@ -162,7 +249,7 @@ int COUT_StartGame(void) {
 
   drawBackground(renderer);
   // drawProj(&proj, renderer);
-  // drawBar(&bar, renderer);
+  drawBar(&bar, renderer);
   // drawTargets(&targets, renderer);
 
   while (!quit) {
@@ -198,9 +285,10 @@ int COUT_StartGame(void) {
     }
 
     if (reset) {
-      // bar = initialBar();
+      bar = initialBar();
       // proj = initialProj();
       // targets = initialTargets();
+      initializeParticles(particles);
       started = false;
       reset = false;
       pause = false;
@@ -220,13 +308,13 @@ int COUT_StartGame(void) {
     if (!pause && started) {
       if (!won && !lost) {
         if (a_pressed && !d_pressed) {
-          // setBarSpeedLeft(&bar);
+          setBarSpeedLeft(&bar);
         } else if (d_pressed && !a_pressed) {
-          // setBarSpeedRight(&bar);
+          setBarSpeedRight(&bar);
         } else {
-          // bar.vel = 0;
+          bar.vel = 0;
         }
-        // updateBar(&bar);
+        updateBar(&bar);
         // updateParticles(&particles);
         //
         // lost = hasLost(&proj); // must be before proj has been
@@ -242,7 +330,7 @@ int COUT_StartGame(void) {
 
     drawBackground(renderer);
     // drawProj(&proj, renderer);
-    // drawBar(&bar, renderer);
+    drawBar(&bar, renderer);
     // drawTargets(&targets, renderer);
     // drawParticles(&particles, renderer);
     // FIXME: Why is nothing shown:
