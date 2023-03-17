@@ -69,13 +69,13 @@ void drawBackground(SDL_Renderer *const renderer) {
 
 void renderSurface(SDL_Renderer *const renderer, SDL_Surface *const surface,
                    const Vector2D *pos) {
-  SDL_Texture *texture = SDL_CreateTextureFromSurface(renderer, surface);
+  SDL_Texture *const texture = SDL_CreateTextureFromSurface(renderer, surface);
   if (!texture) {
     SDL_Log("SDL_CreateTextureFromSurface: %s\n", SDL_GetError());
     return;
   };
 
-  SDL_Rect rect = createSdlRect(pos->x, pos->y, surface->w, surface->h);
+  const SDL_Rect rect = createSdlRect(pos->x, pos->y, surface->w, surface->h);
   SDL_RenderCopy(renderer, texture, NULL, &rect);
   SDL_DestroyTexture(texture);
 }
@@ -84,12 +84,60 @@ void renderText(SDL_Renderer *const renderer, const char *const text,
                 color_t color, const Vector2D *const pos,
                 TTF_Font *const font) {
   SDL_Color sdl_color = colorToSdlColor(color);
-  SDL_Surface *surface = TTF_RenderText_Solid(font, text, sdl_color);
+  SDL_Surface *const surface = TTF_RenderText_Solid(font, text, sdl_color);
   if (!surface) {
     SDL_Log("TTF_RenderText_Solid: %s\n", TTF_GetError());
     return;
   };
   renderSurface(renderer, surface, pos);
+  SDL_FreeSurface(surface);
+}
+
+void renderXYCenteredText(SDL_Renderer *const renderer, const char *const text,
+                          color_t color, TTF_Font *const font) {
+  const SDL_Color sdl_color = colorToSdlColor(color);
+  SDL_Surface *const surface = TTF_RenderText_Solid(font, text, sdl_color);
+  if (!surface) {
+    SDL_Log("TTF_RenderText_Solid: %s\n", TTF_GetError());
+    return;
+  };
+  const Vector2D pos = {
+      .x = ((float)(uint32_t)WINDOW_WIDTH - surface->w) / 2,
+      .y = ((float)(uint32_t)WINDOW_HEIGHT - surface->h) / 2,
+  };
+  renderSurface(renderer, surface, &pos);
+  SDL_FreeSurface(surface);
+}
+
+void renderYCenteredText(SDL_Renderer *const renderer, const char *const text,
+                         const color_t color, TTF_Font *const font,
+                         const uint32_t x_pos) {
+  const SDL_Color sdl_color = colorToSdlColor(color);
+  SDL_Surface *const surface = TTF_RenderText_Solid(font, text, sdl_color);
+  if (!surface) {
+    SDL_Log("TTF_RenderText_Solid: %s\n", TTF_GetError());
+    return;
+  };
+  const Vector2D pos = {.x = x_pos,
+                        .y = ((float)(uint32_t)WINDOW_HEIGHT - surface->h) / 2};
+  renderSurface(renderer, surface, &pos);
+  SDL_FreeSurface(surface);
+}
+
+void renderXCenteredText(SDL_Renderer *const renderer, const char *const text,
+                         const color_t color, TTF_Font *const font,
+                         const uint32_t y_pos) {
+  const SDL_Color sdl_color = colorToSdlColor(color);
+  SDL_Surface *const surface = TTF_RenderText_Solid(font, text, sdl_color);
+  if (!surface) {
+    SDL_Log("TTF_RenderText_Solid: %s\n", TTF_GetError());
+    return;
+  };
+  const Vector2D pos = {
+      .x = ((float)(uint32_t)WINDOW_WIDTH - surface->w) / 2,
+      .y = y_pos,
+  };
+  renderSurface(renderer, surface, &pos);
   SDL_FreeSurface(surface);
 }
 
@@ -619,25 +667,23 @@ int COUT_StartGame(void) {
     writeScore(score, highscore, renderer, score_font);
 
     if (!started) {
-      //   renderXYCenteredText(renderer,
-      //                        "Press A or D to move the bar and start the "
-      //                        "game.While playing press SPACE to pause.",
-      //                        &TEXT_COLOR, game_font);
-      //   renderXCenteredText(renderer, "Press Q anytime to quit.",
-      //   &TEXT_COLOR,
-      //                       game_font, WINDOW_HEIGHT / 2 + 20 * SCALING);
-      // } else if (pause) {
-      //   renderXYCenteredText(renderer, "Press SPACE to unpause or Q to
-      //   quit.",
-      //                        &TEXT_COLOR, game_font);
-      // } else if (won) {
-      //   renderXYCenteredText(renderer,
-      //                        "You won! Press R to restart or Q to quit.",
-      //                        &TEXT_COLOR, game_font);
-      // } else if (lost) {
-      //   renderXYCenteredText(renderer,
-      //                        "You lost! Press R to restart or Q to quit.",
-      //                        &TEXT_COLOR, game_font);
+      renderXYCenteredText(renderer,
+                           "Press A or D to move the bar and start the "
+                           "game.While playing press SPACE to pause.",
+                           TEXT_COLOR, game_font);
+      renderXCenteredText(renderer, "Press Q anytime to quit.", TEXT_COLOR,
+                          game_font, WINDOW_HEIGHT / 2 + 20 * SCALING);
+    } else if (pause) {
+      renderXYCenteredText(renderer, "Press SPACE to unpause or Q to quit.",
+                           TEXT_COLOR, game_font);
+    } else if (won) {
+      renderXYCenteredText(renderer,
+                           "You won! Press R to restart or Q to quit.",
+                           TEXT_COLOR, game_font);
+    } else if (lost) {
+      renderXYCenteredText(renderer,
+                           "You lost! Press R to restart or Q to quit.",
+                           TEXT_COLOR, game_font);
     }
 
     SDL_RenderPresent(renderer);
