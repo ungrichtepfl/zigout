@@ -11,7 +11,7 @@ pub fn build(b: *std.build.Builder) void {
     // between Debug, ReleaseSafe, ReleaseFast, and ReleaseSmall.
     const mode = b.standardReleaseOptions();
 
-    const exe = b.addExecutable("zigout", "src/main.zig");
+    const exe = b.addExecutable("zigout", "zigout.zig");
     exe.setTarget(target);
     exe.setBuildMode(mode);
     exe.linkSystemLibrary("SDL2");
@@ -28,7 +28,7 @@ pub fn build(b: *std.build.Builder) void {
     const run_step = b.step("run", "Run the app");
     run_step.dependOn(&run_cmd.step);
 
-    const exe_tests = b.addTest("src/main.zig");
+    const exe_tests = b.addTest("zigout.zig");
     exe_tests.setTarget(target);
     exe_tests.setBuildMode(mode);
 
