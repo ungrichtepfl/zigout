@@ -4,14 +4,70 @@
 #include <stdint.h>
 #include <stdio.h>
 
-#include "cout.h"
+/****** GAME CONFIG ******/
+#define SAVE_HIGHSCORE 1
+#define HIGHSCORE_FILE_NAME "highscore.txt"
 
-#define FONT_FILEPATH "../Lato-Regular.ttf"
-#define TEXT_BUF_SIZE 100
+#define SCALING 1
+#define DEFAULT_WINDOW_WIDTH 1200
+#define DEFAULT_WINDOW_HEIGHT 900
+#define WINDOW_WIDTH (DEFAULT_WINDOW_WIDTH * SCALING)
+#define WINDOW_HEIGHT (DEFAULT_WINDOW_HEIGHT * SCALING)
+#define BACKGROUND_COLOR 0x181818FF
+#define TEXT_COLOR 0xDCDCDCFF
+
+#define FPS 60
+#define FRAME_TARGET_TIME_MS (1000.0 / FPS)
+#define DELTA_TIME_SEC (1.0 / FPS)
+
+#define PROJ_SPEED 350
+#define PROJ_WIDTH 30
+#define PROJ_HEIGHT 30
+#define PROJ_COLOR 0xE6E6E6FF
+
+#define BAR_HEIGHT 20
+#define BAR_WIDTH 80
+#define BAR_START_X (WINDOW_WIDTH / 2.0 - BAR_WIDTH / 2.0)
+#define BAR_START_Y (7 * WINDOW_HEIGHT / 8.0)
+#define BAR_SPEED                                                              \
+  (PROJ_SPEED - 1) // smaller than PROJ_SPEED to prevent Proj sticking to Bar
+#define BAR_COLOR 0xFF4040FF
+
+#define TARGET_X_SPACING 10
+#define TARGET_Y_SPACING 10
+#define TARGET_Y_NUMBER (10 * SCALING)
+#define TARGET_X_NUMBER (10 * SCALING)
+#define TARGET_WIDTH BAR_WIDTH
+#define TARGET_HEIGHT BAR_HEIGHT
+#define TARGET_SPACE_HEIGHT                                                    \
+  (TARGET_Y_SPACING * (TARGET_Y_NUMBER - 1) + TARGET_HEIGHT * TARGET_Y_NUMBER)
+#define TARGET_SPACE_WIDTH                                                     \
+  (TARGET_X_SPACING * (TARGET_X_NUMBER - 1) + TARGET_WIDTH * TARGET_X_NUMBER)
+#define TARGET_NUMBER (TARGET_Y_NUMBER * TARGET_X_NUMBER)
+#define TARGET_Y_PADDING (WINDOW_HEIGHT / 10)
+#define TARGET_X_PADDING ((WINDOW_WIDTH - TARGET_SPACE_WIDTH) / 2)
+#define TARGET_SCORE 100
+
+#define PARTICLE_NUMBER 1000
+#define PARTICLE_TO_EMIT 30
+#define PARTICLE_TO_EMIT_VARIABILITY (PARTICLE_TO_EMIT / 4 * 2)
+#define PARTICLE_SIZE 10
+#define PARTICLE_SIZE_VARIABLILIY (PARTICLE_SIZE - 1)
+#define PARTICLE_SPEED 5
+#define PARTICLE_SPEED_VARIABILITY (PARTICLE_SPEED - 1)
+#define PARTICLE_LIFETIME_SEC 2
+#define PARTICLE_LIFETIME_SEC_VARIABILITY 1.5
+
+/****** GENERAL DATA TYPES *********/
 
 typedef enum { false, true } bool;
 
 typedef uint32_t color_t;
+
+/****** MACRO DEFINITIONS **********/
+
+#define FONT_FILEPATH "../Lato-Regular.ttf"
+#define TEXT_BUF_SIZE 100
 
 #define SIGN(x) (x >= 0 ? 1 : -1)
 #define FCLAMP(x, lower, upper) fmax(lower, fmin(x, upper))
@@ -38,6 +94,8 @@ static int exit_code = 0;
   } while (0)
 
 #define EXIT() EXIT_WITH(1)
+
+/******* GAME MECHANICS ********/
 
 typedef struct Vector2D_s {
   float x;
@@ -537,7 +595,7 @@ void saveHighscore(const uint64_t highscore) {
   fputs(text_buf, file);
 }
 
-int COUT_StartGame(void) {
+int runGame(void) {
   SDL_Window *window = NULL;
   SDL_Renderer *renderer = NULL;
   TTF_Font *game_font = NULL;
@@ -585,7 +643,7 @@ int COUT_StartGame(void) {
     EXIT();
   }
 
-  // ---- State of the game ---- //
+  /******* State of the game *******/
   bool quit = false;
   bool pause = false;
   bool started = false;
@@ -600,7 +658,7 @@ int COUT_StartGame(void) {
   initializeTargets(targets);
   Particle particles[PARTICLE_NUMBER];
   initializeParticles(particles);
-  // --------------------------- //
+  /*********************************/
 
 #if SAVE_HIGHSCORE
   if (readHighscore(&highscore)) {
@@ -733,3 +791,5 @@ quit:
   SDL_Quit();
   return exit_code;
 }
+
+int main(void) { return runGame(); }

@@ -4,8 +4,11 @@ LIB_DIR := lib
 OBJ_DIR := obj
 BIN_DIR := bin
 
+_EXCLUDE := nobuild.c
+EXCLUDE  := $(_EXCLUDE:%=$(SRC_DIR)/%)
+
 EXE := $(BIN_DIR)/cout
-SRC := $(wildcard $(SRC_DIR)/*.c)
+SRC := $(filter-out $(EXCLUDE), $(wildcard $(SRC_DIR)/*.c))
 OBJ := $(SRC:$(SRC_DIR)/%.c=$(OBJ_DIR)/%.o)
 
 # If RELEASE environment var is set to 1
