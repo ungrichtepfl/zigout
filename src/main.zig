@@ -84,7 +84,7 @@ pub fn vecMult(vec: *const Vector2D, scalar: f32) Vector2D {
     };
 }
 
-pub fn multToVec(vec: *const Vector2D, scalar: f32) void {
+pub fn multToVec(vec: *Vector2D, scalar: f32) void {
     vec.x = @floatToInt(i32, @intToFloat(f32, vec.x) * scalar);
     vec.y = @floatToInt(i32, @intToFloat(f32, vec.y) * scalar);
 }
@@ -123,6 +123,10 @@ pub const Projectile = struct {
     pos: Vector2D,
     vel: Vector2D,
 };
+
+inline fn abs(comptime T: type, a: T) T {
+    return if (a >= 0) a else -a;
+}
 
 pub fn emitParticles(particles: *[PARTICLE_NUMBER]Particle, target: *const Target) void {
     var emitted: usize = 0;
@@ -174,6 +178,11 @@ pub fn updateProj(proj: *Projectile, targets: *[TARGET_NUMBER]Target, particles:
     const intersects_bar_y = sdl.SDL_HasIntersection(&barRect, &projRect_y) != 0;
     if (n_pos.y < 0 or n_pos.y + PROJ_HEIGHT > WINDOW_HEIGHT or intersects_bar_y or intersects_target_y) {
         proj.vel.y = -proj.vel.y;
+    }
+    if (intersects_bar_y) {
+        if (abs(i32, bar.vel) > 0) {
+            proj.vel.x = math.sign(bar.vel) * abs(i32, proj.vel.x);
+        }
     }
 
     addToVec(&proj.pos, &vecMult(&proj.vel, DELTA_TIME_SEC));
@@ -381,8 +390,8 @@ pub fn initialTargets() [TARGET_NUMBER]Target {
     for (targets) |*target| {
         const idx_x = @mod(idx, TARGET_X_NUMBER);
         const idx_y = @divTrunc(idx, TARGET_X_NUMBER);
-        var pos_x = TARGET_X_PADDING + (dx + align_dx) * idx_x;
-        var pos_y = TARGET_Y_PADDING + (dy + align_dy) * idx_y;
+        const pos_x = TARGET_X_PADDING + (dx + align_dx) * idx_x;
+        const pos_y = TARGET_Y_PADDING + (dy + align_dy) * idx_y;
 
         const t = @intToFloat(f32, idx_y) / @intToFloat(f32, TARGET_Y_NUMBER);
         const target_color = if (t < level) lerp_color_gamma_corrected(&red, &green, t / level) else lerp_color_gamma_corrected(&green, &blue, (t - level) / (1 - level));
@@ -456,15 +465,6 @@ pub fn renderYCenteredText(renderer: *sdl.SDL_Renderer, text: [*]const u8, color
     renderSurface(renderer, surface, &pos);
 }
 
-fn colorToSdlColor(color: *const Color) sdl.SDL_Color {
-    return .{
-        .r = color.r,
-        .g = color.g,
-        .b = color.b,
-        .a = color.a,
-    };
-}
-
 pub fn renderXCenteredText(renderer: *sdl.SDL_Renderer, text: [*]const u8, color: *const Color, font: *sdl.TTF_Font, y_pos: i32) void {
     const sdl_color = colorToSdlColor(color);
     const surface: *sdl.SDL_Surface = sdl.TTF_RenderText_Solid(font, text, sdl_color) orelse {
@@ -477,6 +477,15 @@ pub fn renderXCenteredText(renderer: *sdl.SDL_Renderer, text: [*]const u8, color
         .y = y_pos,
     };
     renderSurface(renderer, surface, &pos);
+}
+
+fn colorToSdlColor(color: *const Color) sdl.SDL_Color {
+    return .{
+        .r = color.r,
+        .g = color.g,
+        .b = color.b,
+        .a = color.a,
+    };
 }
 
 pub fn renderSurface(renderer: *sdl.SDL_Renderer, surface: *sdl.SDL_Surface, pos: *const Vector2D) void {
@@ -623,6 +632,7 @@ pub fn main() !void {
             bar = initialBar();
             proj = initialProj();
             targets = initialTargets();
+            particles = initialParticles();
             started = false;
             reset = false;
             pause = false;
