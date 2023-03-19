@@ -8,11 +8,18 @@ EXE := $(BIN_DIR)/cout
 SRC := $(wildcard $(SRC_DIR)/*.c)
 OBJ := $(SRC:$(SRC_DIR)/%.c=$(OBJ_DIR)/%.o)
 
+# If RELEASE environment var is set to 1
+ifeq ($(RELEASE),1)
+	OPTFLAG := -O3
+else 
+	OPTFLAG := -DDEBUG 
+endif
 CPPFLAGS := -I$(INC_DIR) -MMD -MP
-CFLAGS   := -Wall -Wextra -Wpedantic -Werror
-LDFLAGS  := -L$(LIB_DIR)
-SDL2LIB   := `sdl2-config --cflags --libs` -lSDL2_ttf
+CFLAGS   := -Wall -Wextra -Wpedantic -Werror $(OPTFLAG)
+LDFLAGS  := -L$(LIB_DIR) $(OPTFLAG)
+SDL2LIB  := `sdl2-config --cflags --libs` -lSDL2_ttf
 LDLIBS   := -lm $(SDL2LIB)
+
 
 .PHONY: all
 all: $(EXE)
