@@ -6,12 +6,7 @@ const sdl = @cImport({
 const math = std.math;
 var rand = std.rand.DefaultPrng.init(42);
 
-pub const Color = struct {
-    r: u8,
-    g: u8,
-    b: u8,
-    a: u8 = 0xFF,
-};
+// --- GAME CONFIG --- //
 
 const SAVE_HIGHSCORE = true;
 const HIGHSCORE_FILE_NAME = "highscore.txt";
@@ -62,6 +57,15 @@ const PARTICLE_SPEED = 5;
 const PARTICLE_SPEED_VARIABILITY = PARTICLE_SPEED - 1;
 const PARTICLE_LIFETIME_SEC = 2;
 const PARTICLE_LIFETIME_SEC_VARIABILITY = 1.5;
+
+// ------------------ //
+
+pub const Color = struct {
+    r: u8,
+    g: u8,
+    b: u8,
+    a: u8 = 0xFF,
+};
 
 pub const Vector2D = struct {
     x: i32,
@@ -509,14 +513,14 @@ pub fn drawParticles(particles: *const [PARTICLE_NUMBER]Particle, renderer: *sdl
     }
 }
 
-var TEXT_BUF = std.mem.zeroes([100]u8);
+const TEXT_BUF_SIZE = 100;
 
 pub fn writeScore(score: u64, highscore: u64, renderer: *sdl.SDL_Renderer, score_font: *sdl.TTF_Font) void {
-    TEXT_BUF = std.mem.zeroes(@TypeOf(TEXT_BUF));
-    const scoreText = std.fmt.bufPrint(&TEXT_BUF, "Score: {d}", .{score}) catch unreachable;
+    var text_buf: [TEXT_BUF_SIZE]u8 = [1]u8{0} ** TEXT_BUF_SIZE;
+    const scoreText = std.fmt.bufPrint(&text_buf, "Score: {d}", .{score}) catch unreachable;
     renderText(renderer, scoreText.ptr, &TEXT_COLOR, &.{ .x = 10, .y = 10 }, score_font);
-    TEXT_BUF = std.mem.zeroes(@TypeOf(TEXT_BUF));
-    const highscoreText = std.fmt.bufPrint(&TEXT_BUF, "Best: {d}", .{highscore}) catch unreachable;
+    text_buf = std.mem.zeroes(@TypeOf(text_buf));
+    const highscoreText = std.fmt.bufPrint(&text_buf, "Best: {d}", .{highscore}) catch unreachable;
     renderText(renderer, highscoreText.ptr, &TEXT_COLOR, &.{ .x = 10, .y = 30 }, score_font);
 }
 
@@ -526,9 +530,9 @@ pub fn readHighscore() !u64 {
         .{},
     );
     defer file.close();
-    TEXT_BUF = std.mem.zeroes(@TypeOf(TEXT_BUF));
-    const size = try file.readAll(&TEXT_BUF);
-    return try std.fmt.parseInt(u64, TEXT_BUF[0..size], 10);
+    var text_buf: [TEXT_BUF_SIZE]u8 = [1]u8{0} ** TEXT_BUF_SIZE;
+    const size = try file.readAll(&text_buf);
+    return try std.fmt.parseInt(u64, text_buf[0..size], 10);
 }
 
 pub fn saveHighscore(highscore: u64) void {
@@ -537,12 +541,12 @@ pub fn saveHighscore(highscore: u64) void {
         .{},
     ) catch return;
     defer file.close();
-    TEXT_BUF = std.mem.zeroes(@TypeOf(TEXT_BUF));
-    const highscoreText = std.fmt.bufPrint(&TEXT_BUF, "{d}", .{highscore}) catch unreachable;
+    var text_buf: [TEXT_BUF_SIZE]u8 = [1]u8{0} ** TEXT_BUF_SIZE;
+    const highscoreText = std.fmt.bufPrint(&text_buf, "{d}", .{highscore}) catch unreachable;
     _ = file.writeAll(highscoreText) catch return;
 }
 
-pub fn main() !void {
+pub fn runGame() !void {
     if (sdl.SDL_Init(sdl.SDL_INIT_VIDEO) != 0) {
         sdl.SDL_Log("Unable to initialize SDL: %s", sdl.SDL_GetError());
         return error.SDLInitializationFailed;
@@ -697,4 +701,8 @@ pub fn main() !void {
     if (SAVE_HIGHSCORE) {
         saveHighscore(highscore);
     }
+}
+
+pub fn main() !void {
+    try runGame();
 }
