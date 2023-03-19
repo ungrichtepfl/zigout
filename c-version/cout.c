@@ -506,6 +506,37 @@ void drawProj(const Projectile *const proj, SDL_Renderer *const renderer) {
   SDL_RenderFillRect(renderer, &rect);
 }
 
+int readHighscore(uint64_t *const highscore) {
+  FILE *file = fopen(HIGHSCORE_FILE_NAME, "r");
+  if (!file)
+    return -1;
+
+  char text_buf[TEXT_BUF_SIZE];
+
+  char c;
+  size_t i = 0;
+  while (c = fgetc(file), c != EOF) {
+    text_buf[i] = c;
+    i++;
+  }
+  // Other way to read file:
+  // while (fgets(text_buf, TEXT_BUF_SIZE, file)) {
+  // }
+
+  *highscore = atoi(text_buf);
+
+  return 0;
+}
+
+void saveHighscore(const uint64_t highscore) {
+  FILE *file = fopen(HIGHSCORE_FILE_NAME, "w");
+  if (!file)
+    return;
+  char text_buf[TEXT_BUF_SIZE];
+  sprintf(text_buf, "%lu", highscore);
+  fputs(text_buf, file);
+}
+
 int COUT_StartGame(void) {
   SDL_Window *window = NULL;
   SDL_Renderer *renderer = NULL;
@@ -572,7 +603,9 @@ int COUT_StartGame(void) {
   // --------------------------- //
 
 #if SAVE_HIGHSCORE
-  // highscore = readHighscore();
+  if (readHighscore(&highscore)) {
+    highscore = 0;
+  };
 #endif
 
   drawBackground(renderer);
@@ -688,7 +721,7 @@ int COUT_StartGame(void) {
   }
 
 #if SAVE_HIGHSCORE
-  // saveHighscore(highscore);
+  saveHighscore(highscore);
 #endif
 
 quit:
