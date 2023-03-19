@@ -6,12 +6,12 @@ A makefile for [GNU Make](https://www.gnu.org/software/make/) is include for eas
 
 To build:
 ```
-make
+RELEASE=1 make
 ```
 
 To run: 
 ```
-make run
+RELEASE=1 make run
 ```
  
 **Dependencies:**
