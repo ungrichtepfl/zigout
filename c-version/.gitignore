@@ -1,2 +1,4 @@
 bin/
 obj/
+nobuild
+nobuild.old
