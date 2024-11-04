@@ -21,7 +21,7 @@ const TEXT_COLOR = Color{ .r = 0xDC, .g = 0xDC, .b = 0xDC };
 
 const FPS = 60;
 const FRAME_TARGET_TIME_MS = 1000 / FPS;
-const DELTA_TIME_SEC: f32 = 1.0 / @intToFloat(f32, FPS);
+const DELTA_TIME_SEC = 1.0 / @as(f32, @floatFromInt(FPS));
 
 const PROJ_SPEED: i32 = 350;
 const PROJ_WIDTH = 30;
@@ -82,15 +82,20 @@ pub fn createSdlRect(x: i32, y: i32, w: i32, h: i32) sdl.SDL_Rect {
 }
 
 pub fn vecMult(vec: *const Vector2D, scalar: f32) Vector2D {
+    const x: f32 = @floatFromInt(vec.x);
+    const y: f32 = @floatFromInt(vec.y);
     return .{
-        .x = @floatToInt(i32, @intToFloat(f32, vec.x) * scalar),
-        .y = @floatToInt(i32, @intToFloat(f32, vec.y) * scalar),
+        .x = @intFromFloat(x * scalar),
+        .y = @intFromFloat(y * scalar),
     };
 }
 
 pub fn multToVec(vec: *Vector2D, scalar: f32) void {
-    vec.x = @floatToInt(i32, @intToFloat(f32, vec.x) * scalar);
-    vec.y = @floatToInt(i32, @intToFloat(f32, vec.y) * scalar);
+    const x: f32 = @floatFromInt(vec.x);
+    const y: f32 = @floatFromInt(vec.y);
+
+    vec.x = @intFromFloat(x * scalar);
+    vec.y = @intFromFloat(y * scalar);
 }
 
 pub fn addToVec(a: *Vector2D, b: *const Vector2D) void {
@@ -134,14 +139,15 @@ inline fn abs(comptime T: type, a: T) T {
 
 pub fn emitParticles(particles: *[PARTICLE_NUMBER]Particle, target: *const Target) void {
     var emitted: usize = 0;
-    const to_emit = PARTICLE_TO_EMIT + @floatToInt(i32, (rand.random().float(f32) - 0.5) * PARTICLE_TO_EMIT_VARIABILITY);
+    const rnd: i32 = @intFromFloat((rand.random().float(f32) - 0.5) * PARTICLE_TO_EMIT_VARIABILITY);
+    const to_emit = PARTICLE_TO_EMIT + rnd;
     for (particles) |*particle| {
         if (particle.time_alive_sec < 0) {
             particle.time_alive_sec = 0;
             particle.color = target.color;
             particle.max_time_alive_sec += (rand.random().float(f32) - 0.5) * PARTICLE_LIFETIME_SEC_VARIABILITY;
-            particle.speed += @floatToInt(i32, (rand.random().float(f32) - 0.5) * PARTICLE_SPEED_VARIABILITY);
-            particle.size += @floatToInt(i32, (rand.random().float(f32) - 0.5) * PARTICLE_SIZE_VARIABLILIY);
+            particle.speed += @intFromFloat((rand.random().float(f32) - 0.5) * PARTICLE_SPEED_VARIABILITY);
+            particle.size += @intFromFloat((rand.random().float(f32) - 0.5) * PARTICLE_SIZE_VARIABLILIY);
             particle.pos.x = target.pos.x + @divTrunc(TARGET_WIDTH, 2) - @divTrunc(particle.size, 2);
             particle.pos.y = target.pos.y + @divTrunc(TARGET_HEIGHT, 2) - @divTrunc(particle.size, 2);
             particle.angle = rand.random().float(f32) * math.tau;
@@ -261,7 +267,8 @@ fn setBarSpeedDir(bar: *Bar, direction: i32) void {
 }
 
 pub fn updateBar(bar: *Bar) void {
-    var nx = bar.pos.x + @floatToInt(i32, @intToFloat(f32, bar.vel) * DELTA_TIME_SEC);
+    const vel: f32 = @floatFromInt(bar.vel);
+    var nx = bar.pos.x + @as(i32, @intFromFloat(vel * DELTA_TIME_SEC));
     nx = math.clamp(nx, 0, WINDOW_WIDTH - BAR_WIDTH);
     bar.pos.x = nx;
 }
@@ -274,11 +281,11 @@ pub fn updateParticles(particles: *[PARTICLE_NUMBER]Particle) void {
                 particle.* = Particle{};
                 continue;
             }
-            particle.pos.x += @floatToInt(i32, @intToFloat(f32, particle.speed) * math.cos(particle.angle));
-            particle.pos.y += @floatToInt(i32, @intToFloat(f32, particle.speed) * math.sin(particle.angle));
+            particle.pos.x += @intFromFloat(@as(f32, @floatFromInt(particle.speed)) * math.cos(particle.angle));
+            particle.pos.y += @intFromFloat(@as(f32, @floatFromInt(particle.speed)) * math.sin(particle.angle));
             var color = particle.color;
             const alpha = 255.0 * (1 - particle.time_alive_sec / particle.max_time_alive_sec);
-            color.a = @floatToInt(u8, alpha);
+            color.a = @intFromFloat(alpha);
             particle.color = color;
         }
     }
@@ -304,11 +311,11 @@ const LinearColor = struct {
 };
 
 fn color_u8_to_f32(x: u8) f32 {
-    return @intToFloat(f32, x) / 255.0;
+    return @as(f32, @floatFromInt(x)) / 255.0;
 }
 
 fn color_f32_to_u8(x: f32) u8 {
-    return @floatToInt(u8, x * 255.0);
+    return @intFromFloat(x * 255.0);
 }
 
 fn to_linear(x: u8) f32 {
@@ -348,11 +355,13 @@ fn lerp_color_gamma_corrected(color1: *const Color, color2: *const Color, t: f32
 }
 
 fn lerp_color(color1: *const LinearColor, color2: *const LinearColor, t: f32) LinearColor {
-    var vec1 = [_]f32{ color1.r, color1.g, color1.b, color1.a };
-    var vec2 = [_]f32{ color2.r, color2.g, color2.b, color2.a };
+    const vec1 = [_]f32{ color1.r, color1.g, color1.b, color1.a };
+    const vec2 = [_]f32{ color2.r, color2.g, color2.b, color2.a };
     var res = [_]f32{ 0, 0, 0, 0 };
-    for (vec1) |*v1, i| {
+    var i: usize = 0;
+    for (&vec1) |*v1| {
         res[i] = v1.* + (vec2[i] - v1.*) * t;
+        i += 1;
     }
     return .{
         .r = res[0],
@@ -391,13 +400,13 @@ pub fn initialTargets() [TARGET_NUMBER]Target {
     const level = 0.5;
 
     var idx: i32 = 0;
-    for (targets) |*target| {
+    for (&targets) |*target| {
         const idx_x = @mod(idx, TARGET_X_NUMBER);
         const idx_y = @divTrunc(idx, TARGET_X_NUMBER);
         const pos_x = TARGET_X_PADDING + (dx + align_dx) * idx_x;
         const pos_y = TARGET_Y_PADDING + (dy + align_dy) * idx_y;
 
-        const t = @intToFloat(f32, idx_y) / @intToFloat(f32, TARGET_Y_NUMBER);
+        const t: f32 = @as(f32, @floatFromInt(idx_y)) / @as(f32, @floatFromInt(TARGET_Y_NUMBER));
         const target_color = if (t < level) lerp_color_gamma_corrected(&red, &green, t / level) else lerp_color_gamma_corrected(&green, &blue, (t - level) / (1 - level));
         target.* = Target{
             .pos = .{
