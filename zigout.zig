@@ -442,8 +442,8 @@ pub fn drawBackground(renderer: *sdl.SDL_Renderer) void {
 
 pub fn renderText(renderer: *sdl.SDL_Renderer, text: [*]const u8, color: *const Color, pos: *const Vector2D, font: *sdl.TTF_Font) void {
     const sdl_color = colorToSdlColor(color);
-    const surface: *sdl.SDL_Surface = sdl.TTF_RenderText_Solid(font, text, sdl_color) orelse {
-        std.debug.print("TTF_RenderText_Solid: {s}\n", .{sdl.TTF_GetError()});
+    const surface: *sdl.SDL_Surface = sdl.TTF_RenderText_Blended(font, text, sdl_color) orelse {
+        std.debug.print("TTF_RenderText_Blended: {s}\n", .{sdl.TTF_GetError()});
         return;
     };
     defer sdl.SDL_FreeSurface(surface);
@@ -452,8 +452,8 @@ pub fn renderText(renderer: *sdl.SDL_Renderer, text: [*]const u8, color: *const 
 
 pub fn renderXYCenteredText(renderer: *sdl.SDL_Renderer, text: [*]const u8, color: *const Color, font: *sdl.TTF_Font) void {
     const sdl_color = colorToSdlColor(color);
-    const surface: *sdl.SDL_Surface = sdl.TTF_RenderText_Solid(font, text, sdl_color) orelse {
-        std.debug.print("TTF_RenderText_Solid: {s}\n", .{sdl.TTF_GetError()});
+    const surface: *sdl.SDL_Surface = sdl.TTF_RenderText_Blended(font, text, sdl_color) orelse {
+        std.debug.print("TTF_RenderText_Blended: {s}\n", .{sdl.TTF_GetError()});
         return;
     };
     defer sdl.SDL_FreeSurface(surface);
@@ -466,8 +466,8 @@ pub fn renderXYCenteredText(renderer: *sdl.SDL_Renderer, text: [*]const u8, colo
 
 pub fn renderYCenteredText(renderer: *sdl.SDL_Renderer, text: [*]const u8, color: *const Color, font: *sdl.TTF_Font, x_pos: i32) void {
     const sdl_color = colorToSdlColor(color);
-    const surface: *sdl.SDL_Surface = sdl.TTF_RenderText_Solid(font, text, sdl_color) orelse {
-        std.debug.print("TTF_RenderText_Solid: {s}\n", .{sdl.TTF_GetError()});
+    const surface: *sdl.SDL_Surface = sdl.TTF_RenderText_Blended(font, text, sdl_color) orelse {
+        std.debug.print("TTF_RenderText_Blended: {s}\n", .{sdl.TTF_GetError()});
         return;
     };
     defer sdl.SDL_FreeSurface(surface);
@@ -480,8 +480,8 @@ pub fn renderYCenteredText(renderer: *sdl.SDL_Renderer, text: [*]const u8, color
 
 pub fn renderXCenteredText(renderer: *sdl.SDL_Renderer, text: [*]const u8, color: *const Color, font: *sdl.TTF_Font, y_pos: i32) void {
     const sdl_color = colorToSdlColor(color);
-    const surface: *sdl.SDL_Surface = sdl.TTF_RenderText_Solid(font, text, sdl_color) orelse {
-        std.debug.print("TTF_RenderText_Solid: {s}\n", .{sdl.TTF_GetError()});
+    const surface: *sdl.SDL_Surface = sdl.TTF_RenderText_Blended(font, text, sdl_color) orelse {
+        std.debug.print("TTF_RenderText_Blended: {s}\n", .{sdl.TTF_GetError()});
         return;
     };
     defer sdl.SDL_FreeSurface(surface);
@@ -568,7 +568,7 @@ pub fn runGame() !void {
     }
     defer sdl.TTF_Quit();
 
-    const window = sdl.SDL_CreateWindow("Zigout", 0, 0, WINDOW_WIDTH, WINDOW_HEIGHT, 0) orelse {
+    const window = sdl.SDL_CreateWindow("Zigout", 0, 0, WINDOW_WIDTH, WINDOW_HEIGHT, sdl.SDL_WINDOW_ALLOW_HIGHDPI) orelse {
         sdl.SDL_Log("Unable to create window: %s", sdl.SDL_GetError());
         return error.SDLWindowCreationFailed;
     };
