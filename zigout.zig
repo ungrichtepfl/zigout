@@ -4,7 +4,7 @@ const sdl = @cImport({
     @cInclude("SDL2/SDL_ttf.h");
 });
 const math = std.math;
-var rand = std.rand.DefaultPrng.init(42);
+var rand = std.Random.DefaultPrng.init(42);
 
 // --- GAME CONFIG --- //
 
