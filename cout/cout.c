@@ -4,8 +4,19 @@
 #include <stdint.h>
 #include <stdio.h>
 
+#if defined(__EMSCRIPTEN__) || defined(__wasm__) || defined(__wasm32__) ||     \
+    defined(__wasm64__)
+#define FOR_WASM 1
+#else
+#define FOR_WASM 0
+#endif
+
 /****** GAME CONFIG ******/
+#if !FOR_WASM
 #define SAVE_HIGHSCORE 1
+#else
+#define SAVE_HIGHSCORE 0
+#endif
 #define HIGHSCORE_FILE_NAME "highscore.txt"
 
 #define SCALING 1
@@ -757,21 +768,39 @@ int runGame(void) {
     if (!started) {
       renderXYCenteredText(renderer,
                            "Press A or D to move the bar and start the "
-                           "game.While playing press SPACE to pause.",
+                           "game. While playing press SPACE to pause.",
                            TEXT_COLOR, game_font);
+#if !FOR_WASM
       renderXCenteredText(renderer, "Press Q anytime to quit.", TEXT_COLOR,
                           game_font, WINDOW_HEIGHT / 2 + 20 * SCALING);
+#endif
     } else if (pause) {
-      renderXYCenteredText(renderer, "Press SPACE to unpause or Q to quit.",
+
+#if !FOR_WASM
+      renderXYCenteredText(renderer, "Press SPACE to continue or Q to quit.",
                            TEXT_COLOR, game_font);
+#else
+      renderXYCenteredText(renderer, "Press SPACE to continue.", TEXT_COLOR,
+                           game_font);
+#endif
     } else if (won) {
+#if !FOR_WASM
       renderXYCenteredText(renderer,
                            "You won! Press R to restart or Q to quit.",
                            TEXT_COLOR, game_font);
+#else
+      renderXYCenteredText(renderer, "You won! Press R to restart.", TEXT_COLOR,
+                           game_font);
+#endif
     } else if (lost) {
+#if !FOR_WASM
       renderXYCenteredText(renderer,
                            "You lost! Press R to restart or Q to quit.",
                            TEXT_COLOR, game_font);
+#else
+      renderXYCenteredText(renderer, "You lost! Press R to restart.",
+                           TEXT_COLOR, game_font);
+#endif
     }
 
     SDL_RenderPresent(renderer);

@@ -2,3 +2,5 @@ bin/
 obj/
 nobuild
 nobuild.old
+cout.js
+cout.wasm

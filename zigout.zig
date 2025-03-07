@@ -696,7 +696,7 @@ pub fn runGame() !void {
             renderXYCenteredText(renderer, "Press A or D to move the bar and start the game. While playing press SPACE to pause.", &TEXT_COLOR, game_font);
             renderXCenteredText(renderer, "Press Q anytime to quit.", &TEXT_COLOR, game_font, @divTrunc(WINDOW_HEIGHT, 2) + 20 * SCALING);
         } else if (pause) {
-            renderXYCenteredText(renderer, "Press SPACE to unpause or Q to quit.", &TEXT_COLOR, game_font);
+            renderXYCenteredText(renderer, "Press SPACE to continue or Q to quit.", &TEXT_COLOR, game_font);
         } else if (won) {
             renderXYCenteredText(renderer, "You won! Press R to restart or Q to quit.", &TEXT_COLOR, game_font);
         } else if (lost) {
