@@ -560,7 +560,7 @@ Projectile initialProj() {
       .vel =
           (Vector2D){
               .x = PROJ_SPEED,
-              .y = PROJ_SPEED,
+              .y = -PROJ_SPEED,
           },
   };
 }
@@ -693,10 +693,12 @@ int runGame(void) {
       }
       case SDL_KEYDOWN: {
         switch (event.key.keysym.sym) {
+#if !FOR_WASM
         case 'q': {
           quit = true;
           break;
         }
+#endif
         case ' ': {
           pause = !pause;
           break;
@@ -730,14 +732,29 @@ int runGame(void) {
     bool a_pressed = keyboard_state[SDL_SCANCODE_A] != 0;
     bool d_pressed = keyboard_state[SDL_SCANCODE_D] != 0;
 
-    if (!started && (a_pressed || d_pressed)) {
+    int mouseX = -1;
+    {
+      int mx, my;
+      const Uint32 mouse_button = SDL_GetMouseState(&mx, &my);
+      if (mouse_button & SDL_BUTTON(SDL_BUTTON_LEFT)) {
+        mouseX = mx;
+      }
+    }
+
+    if (!started && (a_pressed || d_pressed || mouseX > 0)) {
       started = true;
-      proj.vel.x = a_pressed ? -PROJ_SPEED : PROJ_SPEED;
+      if (mouseX > 0)
+        proj.vel.x = mouseX < (WINDOW_WIDTH / 2) ? -PROJ_SPEED : PROJ_SPEED;
+      else
+        proj.vel.x = a_pressed ? -PROJ_SPEED : PROJ_SPEED;
     }
 
     if (!pause && started) {
       if (!won && !lost) {
-        if (a_pressed && !d_pressed) {
+        if (mouseX > 0) {
+          bar.pos.x = mouseX;
+          bar.vel = 0;
+        } else if (a_pressed && !d_pressed) {
           setBarSpeedLeft(&bar);
         } else if (d_pressed && !a_pressed) {
           setBarSpeedRight(&bar);
@@ -768,20 +785,30 @@ int runGame(void) {
     if (!started) {
       renderXYCenteredText(renderer,
                            "Press A or D to move the bar and start the "
-                           "game. While playing press SPACE to pause.",
+                           "game. If it is too difficult use the mouse.",
                            TEXT_COLOR, game_font);
 #if !FOR_WASM
-      renderXCenteredText(renderer, "Press Q anytime to quit.", TEXT_COLOR,
-                          game_font, WINDOW_HEIGHT / 2 + 20 * SCALING);
+      renderXCenteredText(renderer,
+                          "While playing press SPACE to pause, Q "
+                          "to quit or R to restart.",
+                          TEXT_COLOR, game_font,
+                          WINDOW_HEIGHT / 2 + 20 * SCALING);
+#else
+      renderXCenteredText(renderer,
+                          "While playing press SPACE to pause or R "
+                          "to restart.",
+                          TEXT_COLOR, game_font,
+                          WINDOW_HEIGHT / 2 + 20 * SCALING);
 #endif
     } else if (pause) {
 
 #if !FOR_WASM
-      renderXYCenteredText(renderer, "Press SPACE to continue or Q to quit.",
-                           TEXT_COLOR, game_font);
+      renderXYCenteredText(
+          renderer, "Press SPACE to continue, Q to quit or R to restart.",
+          TEXT_COLOR, game_font);
 #else
-      renderXYCenteredText(renderer, "Press SPACE to continue.", TEXT_COLOR,
-                           game_font);
+      renderXYCenteredText(renderer, "Press SPACE to continue or R to restart.",
+                           TEXT_COLOR, game_font);
 #endif
     } else if (won) {
 #if !FOR_WASM
