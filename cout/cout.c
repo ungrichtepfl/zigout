@@ -616,6 +616,7 @@ int runGame(void) {
     SDL_Log("Unable to initialize SDL: %s", SDL_GetError());
     EXIT();
   }
+  SDL_SetHint(SDL_HINT_TOUCH_MOUSE_EVENTS, "1"); // Enable touch as well
 
   if (TTF_Init()) {
     SDL_Log("Unable to initialize SDL_ttf: %s", TTF_GetError());

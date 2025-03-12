@@ -25,6 +25,13 @@
           module._sdlSendLeftMouseButtonPressed(event.clientX, event.clientY);
         }
       });
+      document.getElementById("canvas-cout").addEventListener("touchmove", function (event) {
+        if (event.touches.length > 0) { // Check if there is at least one touch point
+          let touch = event.touches[0]; // Get first touch
+          module._sdlSendLeftMouseButtonPressed(touch.clientX, touch.clientY);
+        }
+        event.preventDefault(); // Prevent scrolling while touching
+      });
       module._runGame();
     });
   </script>
