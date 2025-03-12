@@ -684,11 +684,19 @@ int runGame(void) {
 
   while (!quit) {
     SDL_Event event;
+    int mouseX = -1;
     while (SDL_PollEvent(&event)) {
+      mouseX = -1;
 
       switch (event.type) {
       case SDL_QUIT: {
         quit = true;
+        break;
+      }
+      case SDL_MOUSEMOTION: {
+
+        if (event.motion.state == SDL_BUTTON_LMASK)
+          mouseX = event.button.x;
         break;
       }
       case SDL_KEYDOWN: {
@@ -731,15 +739,6 @@ int runGame(void) {
 
     bool a_pressed = keyboard_state[SDL_SCANCODE_A] != 0;
     bool d_pressed = keyboard_state[SDL_SCANCODE_D] != 0;
-
-    int mouseX = -1;
-    {
-      int mx, my;
-      const Uint32 mouse_button = SDL_GetMouseState(&mx, &my);
-      if (mouse_button & SDL_BUTTON(SDL_BUTTON_LEFT)) {
-        mouseX = mx;
-      }
-    }
 
     if (!started && (a_pressed || d_pressed || mouseX > 0)) {
       started = true;
@@ -847,5 +846,18 @@ quit:
   SDL_Quit();
   return exit_code;
 }
+
+#if FOR_WASM
+// NOTE: This is needed sucht that the game works when embedded in Elm. Somehow
+//  Elm does not bubble through the event.
+void sdlSendLeftMouseButtonPressed(int x, int y) {
+  SDL_Event event;
+  event.type = SDL_MOUSEMOTION;
+  event.motion.x = x;
+  event.motion.y = y;
+  event.motion.state = SDL_BUTTON_LMASK; // Indicate left button is held
+  SDL_PushEvent(&event);
+}
+#endif // FOR_WASM
 
 int main(void) { return runGame(); }

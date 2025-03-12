@@ -8,17 +8,25 @@
 </head>
 
 <body>
-  <canvas class=emscripten id=canvas width=1200 height=900 tabindex=-1></canvas>
+  <canvas class=emscripten id=canvas-cout width=1200 height=900 tabindex=-1></canvas>
   <script src=cout.js>
   </script>
   <script>
     var Module = {
       canvas: (function () {
-        var canvas = document.getElementById('canvas');
+        var canvas = document.getElementById('canvas-cout');
         return canvas;
       })()
     };
-    createCout(Module);
+
+    createCout(Module).then((module) => {
+      document.getElementById("canvas-cout").addEventListener("mousemove", function (event) {
+        if (event.buttons & 1) {  // Left button pressed
+          module._sdlSendLeftMouseButtonPressed(event.clientX, event.clientY);
+        }
+      });
+      module._runGame();
+    });
   </script>
 </body>
 
