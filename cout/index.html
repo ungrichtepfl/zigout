@@ -9,9 +9,8 @@
 
 <body>
   <canvas class=emscripten id=canvas-cout width=1200 height=900 tabindex=-1></canvas>
-  <script src=cout.js>
-  </script>
-  <script>
+  <script type="module">
+    import createCout from "./cout.js";
     var Module = {
       canvas: (function () {
         var canvas = document.getElementById('canvas-cout');
