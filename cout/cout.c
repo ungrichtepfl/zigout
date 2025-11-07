@@ -106,6 +106,18 @@ static int exit_code = 0;
 
 #define EXIT() EXIT_WITH(1)
 
+/******* WASM SPECIFIC *********/
+#if FOR_WASM
+#include <stdatomic.h>
+
+atomic_int_fast8_t should_stop = 0;
+
+void sendShouldStop(void) { should_stop = 1; }
+
+bool wasmShouldStop(void) { return should_stop; }
+
+#endif // FOR_WASM
+
 /******* GAME MECHANICS ********/
 
 typedef struct Vector2D_s {
@@ -832,6 +844,10 @@ int runGame(void) {
 
     SDL_RenderPresent(renderer);
     SDL_Delay(FRAME_TARGET_TIME_MS);
+
+#if FOR_WASM
+    quit = quit || wasmShouldStop();
+#endif // FOR_WASM
   }
 
 #if SAVE_HIGHSCORE
